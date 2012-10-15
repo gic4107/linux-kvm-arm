@@ -2399,7 +2399,7 @@ static int nonpaging_map(struct kvm_vcpu *vcpu, gva_t v, int write, gfn_t gfn,
 		return kvm_handle_bad_page(vcpu->kvm, gfn, pfn);
 
 	spin_lock(&vcpu->kvm->mmu_lock);
-	if (mmu_notifier_retry(vcpu, mmu_seq))
+	if (mmu_notifier_retry(vcpu->kvm, mmu_seq))
 		goto out_unlock;
 	kvm_mmu_free_some_pages(vcpu);
 	if (likely(!force_pt_level))
@@ -2771,7 +2771,7 @@ static int tdp_page_fault(struct kvm_vcpu *vcpu, gva_t gpa, u32 error_code,
 	if (is_error_pfn(pfn))
 		return kvm_handle_bad_page(vcpu->kvm, gfn, pfn);
 	spin_lock(&vcpu->kvm->mmu_lock);
-	if (mmu_notifier_retry(vcpu, mmu_seq))
+	if (mmu_notifier_retry(vcpu->kvm, mmu_seq))
 		goto out_unlock;
 	kvm_mmu_free_some_pages(vcpu);
 	if (likely(!force_pt_level))
