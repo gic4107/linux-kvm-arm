@@ -134,6 +134,7 @@ int handle_exit(struct kvm_vcpu *vcpu, struct kvm_run *run,
 
 	switch (exception_index) {
 	case ARM_EXCEPTION_IRQ:
+		trace_kvm_hwirq(*vcpu_pc(vcpu));
 		return 1;
 	case ARM_EXCEPTION_UNDEFINED:
 		kvm_err("Undefined exception in Hyp mode at: %#08lx\n",
