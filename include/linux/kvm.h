@@ -545,6 +545,29 @@ struct kvm_ppc_pvinfo {
 #define KVM_CAP_TSC_CONTROL 60
 #define KVM_CAP_GET_TSC_KHZ 61
 #define KVM_CAP_PPC_BOOKE_SREGS 62
+#define KVM_CAP_SPAPR_TCE 63
+#define KVM_CAP_PPC_SMT 64
+#define KVM_CAP_PPC_RMA	65
+#define KVM_CAP_MAX_VCPUS 66       /* returns max vcpus per vm */
+#define KVM_CAP_PPC_HIOR 67
+#define KVM_CAP_PPC_PAPR 68
+#define KVM_CAP_SW_TLB 69
+#define KVM_CAP_ONE_REG 70
+#define KVM_CAP_S390_GMAP 71
+#define KVM_CAP_TSC_DEADLINE_TIMER 72
+#define KVM_CAP_S390_UCONTROL 73
+#define KVM_CAP_SYNC_REGS 74
+#define KVM_CAP_PCI_2_3 75
+#define KVM_CAP_KVMCLOCK_CTRL 76
+#define KVM_CAP_SIGNAL_MSI 77
+#define KVM_CAP_PPC_GET_SMMU_INFO 78
+#define KVM_CAP_S390_COW 79
+#define KVM_CAP_PPC_ALLOC_HTAB 80
+#ifdef __KVM_HAVE_READONLY_MEM
+#define KVM_CAP_READONLY_MEM 81
+#endif
+#define KVM_CAP_IRQFD_RESAMPLE 82
+#define KVM_CAP_ARM_PSCI 86
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
