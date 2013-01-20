@@ -623,6 +623,65 @@ struct kvm_clock_data {
 	__u32 pad[9];
 };
 
+#define KVM_MMU_FSL_BOOKE_NOHV		0
+#define KVM_MMU_FSL_BOOKE_HV		1
+
+struct kvm_config_tlb {
+	__u64 params;
+	__u64 array;
+	__u32 mmu_type;
+	__u32 array_len;
+};
+
+struct kvm_dirty_tlb {
+	__u64 bitmap;
+	__u32 num_dirty;
+};
+
+/* Available with KVM_CAP_ONE_REG */
+
+#define KVM_REG_ARCH_MASK	0xff00000000000000ULL
+#define KVM_REG_GENERIC		0x0000000000000000ULL
+
+/*
+ * Architecture specific registers are to be defined in arch headers and
+ * ORed with the arch identifier.
+ */
+#define KVM_REG_PPC		0x1000000000000000ULL
+#define KVM_REG_X86		0x2000000000000000ULL
+#define KVM_REG_IA64		0x3000000000000000ULL
+#define KVM_REG_ARM		0x4000000000000000ULL
+#define KVM_REG_S390		0x5000000000000000ULL
+
+#define KVM_REG_SIZE_SHIFT	52
+#define KVM_REG_SIZE_MASK	0x00f0000000000000ULL
+#define KVM_REG_SIZE_U8		0x0000000000000000ULL
+#define KVM_REG_SIZE_U16	0x0010000000000000ULL
+#define KVM_REG_SIZE_U32	0x0020000000000000ULL
+#define KVM_REG_SIZE_U64	0x0030000000000000ULL
+#define KVM_REG_SIZE_U128	0x0040000000000000ULL
+#define KVM_REG_SIZE_U256	0x0050000000000000ULL
+#define KVM_REG_SIZE_U512	0x0060000000000000ULL
+#define KVM_REG_SIZE_U1024	0x0070000000000000ULL
+
+struct kvm_reg_list {
+	__u64 n; /* number of regs */
+	__u64 reg[0];
+};
+
+struct kvm_one_reg {
+	__u64 id;
+	__u64 addr;
+};
+
+struct kvm_msi {
+	__u32 address_lo;
+	__u32 address_hi;
+	__u32 data;
+	__u32 flags;
+	__u8  pad[16];
+};
+
 /*
  * ioctls for VM fds
  */
@@ -746,6 +805,18 @@ struct kvm_clock_data {
 /* Available with KVM_CAP_XCRS */
 #define KVM_GET_XCRS		  _IOR(KVMIO,  0xa6, struct kvm_xcrs)
 #define KVM_SET_XCRS		  _IOW(KVMIO,  0xa7, struct kvm_xcrs)
+#define KVM_CREATE_SPAPR_TCE	  _IOW(KVMIO,  0xa8, struct kvm_create_spapr_tce)
+/* Available with KVM_CAP_RMA */
+#define KVM_ALLOCATE_RMA	  _IOR(KVMIO,  0xa9, struct kvm_allocate_rma)
+/* Available with KVM_CAP_SW_TLB */
+#define KVM_DIRTY_TLB		  _IOW(KVMIO,  0xaa, struct kvm_dirty_tlb)
+/* Available with KVM_CAP_ONE_REG */
+#define KVM_GET_ONE_REG		  _IOW(KVMIO,  0xab, struct kvm_one_reg)
+#define KVM_SET_ONE_REG		  _IOW(KVMIO,  0xac, struct kvm_one_reg)
+/* VM is being stopped by host */
+#define KVM_KVMCLOCK_CTRL	  _IO(KVMIO,   0xad)
+#define KVM_ARM_VCPU_INIT	  _IOW(KVMIO,  0xae, struct kvm_vcpu_init)
+#define KVM_GET_REG_LIST	  _IOWR(KVMIO, 0xb0, struct kvm_reg_list)
 
 #define KVM_DEV_ASSIGN_ENABLE_IOMMU	(1 << 0)
 
