@@ -567,6 +567,7 @@ struct kvm_ppc_pvinfo {
 #define KVM_CAP_READONLY_MEM 81
 #endif
 #define KVM_CAP_IRQFD_RESAMPLE 82
+#define KVM_CAP_ARM_SET_DEVICE_ADDR 85
 #define KVM_CAP_ARM_PSCI 86
 
 #ifdef KVM_CAP_IRQ_ROUTING
@@ -706,6 +707,11 @@ struct kvm_msi {
 	__u8  pad[16];
 };
 
+struct kvm_arm_device_addr {
+	__u64 id;
+	__u64 addr;
+};
+
 /*
  * ioctls for VM fds
  */
@@ -766,6 +772,17 @@ struct kvm_msi {
 /* Available with KVM_CAP_TSC_CONTROL */
 #define KVM_SET_TSC_KHZ           _IO(KVMIO,  0xa2)
 #define KVM_GET_TSC_KHZ           _IO(KVMIO,  0xa3)
+/* Available with KVM_CAP_PCI_2_3 */
+#define KVM_ASSIGN_SET_INTX_MASK  _IOW(KVMIO,  0xa4, \
+				       struct kvm_assigned_pci_dev)
+/* Available with KVM_CAP_SIGNAL_MSI */
+#define KVM_SIGNAL_MSI            _IOW(KVMIO,  0xa5, struct kvm_msi)
+/* Available with KVM_CAP_PPC_GET_SMMU_INFO */
+#define KVM_PPC_GET_SMMU_INFO	  _IOR(KVMIO,  0xa6, struct kvm_ppc_smmu_info)
+/* Available with KVM_CAP_PPC_ALLOC_HTAB */
+#define KVM_PPC_ALLOCATE_HTAB	  _IOWR(KVMIO, 0xa7, __u32)
+/* Available with KVM_CAP_ARM_SET_DEVICE_ADDR */
+#define KVM_ARM_SET_DEVICE_ADDR	  _IOW(KVMIO,  0xab, struct kvm_arm_device_addr)
 
 /*
  * ioctls for vcpu fds
