@@ -67,6 +67,9 @@ int main(void)
 #ifdef CONFIG_SMP
   DEFINE(VFP_CPU,		offsetof(union vfp_state, hard.cpu));
 #endif
+#ifdef CONFIG_KVM
+  DEFINE(VFP_KVM,		offsetof(union vfp_state, hard.kvm));
+#endif
 #endif
 #ifdef CONFIG_ARM_THUMBEE
   DEFINE(TI_THUMBEE_STATE,	offsetof(struct thread_info, thumbee_state));
@@ -153,8 +156,9 @@ int main(void)
   DEFINE(VCPU_KVM,		offsetof(struct kvm_vcpu, kvm));
   DEFINE(VCPU_MIDR,		offsetof(struct kvm_vcpu, arch.midr));
   DEFINE(VCPU_CP15,		offsetof(struct kvm_vcpu, arch.cp15));
-  DEFINE(VCPU_VFP_GUEST,	offsetof(struct kvm_vcpu, arch.vfp_guest));
+  DEFINE(VCPU_VFP_GUEST,	offsetof(struct kvm_vcpu, arch.vfp_guest.hard));
   DEFINE(VCPU_VFP_HOST,		offsetof(struct kvm_vcpu, arch.vfp_host));
+  DEFINE(VCPU_VFP_GUEST_ACT,	offsetof(struct kvm_vcpu, arch.vfp_guest_active));
   DEFINE(VCPU_REGS,		offsetof(struct kvm_vcpu, arch.regs));
   DEFINE(VCPU_USR_REGS,		offsetof(struct kvm_vcpu, arch.regs.usr_regs));
   DEFINE(VCPU_SVC_REGS,		offsetof(struct kvm_vcpu, arch.regs.svc_regs));

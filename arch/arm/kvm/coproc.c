@@ -717,7 +717,8 @@ static int vfp_get_reg(const struct kvm_vcpu *vcpu, u64 id, void __user *uaddr)
 	if (vfpid < num_fp_regs()) {
 		if (KVM_REG_SIZE(id) != 8)
 			return -ENOENT;
-		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.fpregs[vfpid],
+		return reg_to_user(uaddr,
+				   &vcpu->arch.vfp_guest.hard.fpregs[vfpid],
 				   id);
 	}
 
@@ -727,13 +728,13 @@ static int vfp_get_reg(const struct kvm_vcpu *vcpu, u64 id, void __user *uaddr)
 
 	switch (vfpid) {
 	case KVM_REG_ARM_VFP_FPEXC:
-		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.fpexc, id);
+		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.hard.fpexc, id);
 	case KVM_REG_ARM_VFP_FPSCR:
-		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.fpscr, id);
+		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.hard.fpscr, id);
 	case KVM_REG_ARM_VFP_FPINST:
-		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.fpinst, id);
+		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.hard.fpinst, id);
 	case KVM_REG_ARM_VFP_FPINST2:
-		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.fpinst2, id);
+		return reg_to_user(uaddr, &vcpu->arch.vfp_guest.hard.fpinst2, id);
 	case KVM_REG_ARM_VFP_MVFR0:
 		val = fmrx(MVFR0);
 		return reg_to_user(uaddr, &val, id);
@@ -761,7 +762,7 @@ static int vfp_set_reg(struct kvm_vcpu *vcpu, u64 id, const void __user *uaddr)
 	if (vfpid < num_fp_regs()) {
 		if (KVM_REG_SIZE(id) != 8)
 			return -ENOENT;
-		return reg_from_user(&vcpu->arch.vfp_guest.fpregs[vfpid],
+		return reg_from_user(&vcpu->arch.vfp_guest.hard.fpregs[vfpid],
 				     uaddr, id);
 	}
 
@@ -771,13 +772,13 @@ static int vfp_set_reg(struct kvm_vcpu *vcpu, u64 id, const void __user *uaddr)
 
 	switch (vfpid) {
 	case KVM_REG_ARM_VFP_FPEXC:
-		return reg_from_user(&vcpu->arch.vfp_guest.fpexc, uaddr, id);
+		return reg_from_user(&vcpu->arch.vfp_guest.hard.fpexc, uaddr, id);
 	case KVM_REG_ARM_VFP_FPSCR:
-		return reg_from_user(&vcpu->arch.vfp_guest.fpscr, uaddr, id);
+		return reg_from_user(&vcpu->arch.vfp_guest.hard.fpscr, uaddr, id);
 	case KVM_REG_ARM_VFP_FPINST:
-		return reg_from_user(&vcpu->arch.vfp_guest.fpinst, uaddr, id);
+		return reg_from_user(&vcpu->arch.vfp_guest.hard.fpinst, uaddr, id);
 	case KVM_REG_ARM_VFP_FPINST2:
-		return reg_from_user(&vcpu->arch.vfp_guest.fpinst2, uaddr, id);
+		return reg_from_user(&vcpu->arch.vfp_guest.hard.fpinst2, uaddr, id);
 	/* These are invariant. */
 	case KVM_REG_ARM_VFP_MVFR0:
 		if (reg_from_user(&val, uaddr, id))

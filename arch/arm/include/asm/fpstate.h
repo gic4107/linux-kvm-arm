@@ -43,6 +43,10 @@ struct vfp_hard_struct {
 #ifdef CONFIG_SMP
 	__u32 cpu;
 #endif
+
+#ifdef CONFIG_KVM
+	__u32 kvm;
+#endif
 };
 
 union vfp_state {

@@ -38,6 +38,9 @@
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 #include <asm/virt.h>
+#include <asm/vfp.h>
+#include "../vfp/vfp.h"
+#include "../vfp/vfpinstr.h"
 #include <asm/kvm_arm.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_mmu.h>
@@ -51,7 +54,7 @@ __asm__(".arch_extension	virt");
 #endif
 
 static DEFINE_PER_CPU(unsigned long, kvm_arm_hyp_stack_page);
-static struct vfp_hard_struct __percpu *kvm_host_vfp_state;
+static union vfp_state __percpu *kvm_host_vfp_state;
 static unsigned long hyp_default_vectors;
 
 /* Per-CPU variable containing the currently running vcpu. */
@@ -69,6 +72,8 @@ static void kvm_arm_set_running_vcpu(struct kvm_vcpu *vcpu)
 	BUG_ON(preemptible());
 	__get_cpu_var(kvm_arm_running_vcpu) = vcpu;
 }
+
+extern union vfp_state *vfp_current_hw_state[];
 
 /**
  * kvm_arm_get_running_vcpu - get the vcpu running on the current CPU.
@@ -334,6 +339,9 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);
 
+	/* Mark guest VFP structure as KVM data */
+	vcpu->arch.vfp_guest.hard.kvm = 1;
+
 	return 0;
 }
 
@@ -361,6 +369,29 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
 	kvm_arm_set_running_vcpu(NULL);
+
+	if (vcpu->arch.vfp_guest_active &&
+	    vfp_current_hw_state[vcpu->cpu] == &vcpu->arch.vfp_guest) {
+		u32 fpexc = fmrx(FPEXC);
+
+		/*
+		 * If everything's set up to point to guest VFP, the host
+		 * shouldn't have access to them.
+		 */
+		BUG_ON(fpexc & FPEXC_EN);
+
+		/*
+		 * Save the guest VFP state
+		 */
+		fmxr(FPEXC, fpexc | FPEXC_EN);
+		vfp_save_state(&vcpu->arch.vfp_guest, fpexc);
+		fmxr(FPEXC, fpexc);
+
+		vfp_current_hw_state[vcpu->cpu] = NULL;
+		
+	}
+	vcpu->arch.vfp_guest_active = false;
+	vcpu->arch.vfp_host = NULL;
 }
 
 int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
@@ -727,6 +758,55 @@ static void calc_ws_stats(struct kvm_vcpu *vcpu)
 	calc_avg(abt);
 }
 
+static void kvm_vfp_enter(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.vfp_guest_active) {
+		if (vfp_current_hw_state[vcpu->cpu] != &vcpu->arch.vfp_guest)
+			vcpu->arch.vfp_guest_active = false;
+		else
+			fmxr(FPEXC, vcpu->arch.vfp_guest.hard.fpexc);
+	}
+}
+
+#if 0
+static void kvm_vfp_exit(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.vfp_guest_active) {
+		u32 fpexc = fmrx(FPEXC);
+		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+
+		vfp_current_hw_state[vcpu->cpu] = &vcpu->arch.vfp_guest;
+		vcpu->arch.vfp_guest.hard.cpu = vcpu->cpu;
+	}
+}
+#endif
+extern bool vfp_state_in_hw(unsigned int cpu, struct thread_info *thread);
+static void kvm_vfp_exit(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.vfp_guest_active) {
+		u32 fpexc = fmrx(FPEXC);
+
+#if 0
+		fmxr(FPEXC, fpexc | FPEXC_EN);
+		vfp_save_state(&vcpu->arch.vfp_guest, fpexc);
+#endif
+		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+
+		if (vfp_state_in_hw(vcpu->cpu, current_thread_info())) {
+			memcpy(&current_thread_info()->vfpstate,
+			       vcpu->arch.vfp_host,
+			       sizeof(current_thread_info()->vfpstate));
+		}
+
+#if 0
+		vfp_current_hw_state[vcpu->cpu] = NULL;
+		vcpu->arch.vfp_guest_active = false;
+#endif
+		vfp_current_hw_state[vcpu->cpu] = &vcpu->arch.vfp_guest;
+		vcpu->arch.vfp_guest.hard.cpu = vcpu->cpu;
+	}
+}
+
 /**
  * kvm_arch_vcpu_ioctl_run - the main VCPU run function to execute guest code
  * @vcpu:	The VCPU pointer
@@ -740,7 +820,7 @@ static void calc_ws_stats(struct kvm_vcpu *vcpu)
  */
 int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 {
-	int ret;
+	int guest_ret, ret;
 	sigset_t sigsaved;
 
 	/* Make sure they initialize the vcpu with KVM_ARM_VCPU_INIT */
@@ -794,18 +874,19 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		 * Enter the guest
 		 */
 		trace_kvm_entry(*vcpu_pc(vcpu));
+		kvm_vfp_enter(vcpu);
 		kvm_guest_enter();
 		vcpu->mode = IN_GUEST_MODE;
 
 		smp_mb(); /* set mode before reading vcpu->arch.pause */
 		if (unlikely(vcpu->arch.pause)) {
 			/* This means ignore, try again. */
-			ret = ARM_EXCEPTION_IRQ;
+			guest_ret = ARM_EXCEPTION_IRQ;
 		} else {
 			vcpu->arch.ws_ent_cc1 = kvm_read_ccounter();
 			vcpu->arch.hyp_ent_cc1 = vcpu->arch.ws_ent_cc1;
 
-			ret = kvm_call_hyp(__kvm_vcpu_run, vcpu);
+			guest_ret = kvm_call_hyp(__kvm_vcpu_run, vcpu);
 
 			vcpu->arch.ws_ret_cc2 = kvm_read_ccounter();
 			vcpu->arch.hyp_ret_cc2 = vcpu->arch.ws_ret_cc2;
@@ -815,8 +896,10 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		vcpu->mode = OUTSIDE_GUEST_MODE;
 		vcpu->arch.last_pcpu = smp_processor_id();
 		kvm_guest_exit();
+		kvm_vfp_exit(vcpu);
 		trace_kvm_exit(*vcpu_pc(vcpu),
 			       vcpu->arch.ws_ent_cc2 - vcpu->arch.ws_ent_cc1);
+
 		/*
 		 * We may have taken a host interrupt in HYP mode (ie
 		 * while executing the guest). This interrupt is still
@@ -836,7 +919,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		kvm_timer_sync_hwstate(vcpu);
 		kvm_vgic_sync_hwstate(vcpu);
 
-		ret = handle_exit(vcpu, run, ret);
+		ret = handle_exit(vcpu, run, guest_ret);
 	}
 
 	if (vcpu->sigset_active)
@@ -1140,7 +1223,7 @@ static int init_hyp_mode(void)
 	/*
 	 * Map the host VFP structures
 	 */
-	kvm_host_vfp_state = alloc_percpu(struct vfp_hard_struct);
+	kvm_host_vfp_state = alloc_percpu(union vfp_state);
 	if (!kvm_host_vfp_state) {
 		err = -ENOMEM;
 		kvm_err("Cannot allocate host VFP state\n");
@@ -1148,7 +1231,7 @@ static int init_hyp_mode(void)
 	}
 
 	for_each_possible_cpu(cpu) {
-		struct vfp_hard_struct *vfp;
+		union vfp_state *vfp;
 
 		vfp = per_cpu_ptr(kvm_host_vfp_state, cpu);
 		err = create_hyp_mappings(vfp, vfp + 1);

@@ -109,22 +109,45 @@ ENTRY(__kvm_vcpu_run)
 	read_cp15_state store_to_vcpu = 0
 	write_cp15_state read_from_vcpu = 1
 
-	@ If the host kernel has not been configured with VFPv3 support,
-	@ then it is safer if we deny guests from using it as well.
 #ifdef CONFIG_VFPv3
-	@ Set FPEXC_EN so the guest doesn't trap floating point instructions
+	/*
+	 * There are two cases here:
+	 *   1. The hardware contains some host state
+	 *   2. The hardware contains the guest state
+	 *
+	 * If (1) then we need to make sure that guest VFP accesses trap to
+	 * hyp mode (see vfp_guest_trap below).
+	 *
+	 * If (2) then the guest state is what it is and we make sure not to
+	 * trap VFP register access to hyp mode using the hcptr.
+	 */
+	ldr	r2, [vcpu, #VCPU_VFP_GUEST_ACT]
+	cmp	r2, #0
+	beq	vfp_guest_trap
+
+	set_hcptr vmentry, (HCPTR_TTA)
+	b	after_vfp_guest_entry
+
+vfp_guest_trap:
+	@ Set FPEXC_EN so hyp VFP traps takes priority
 	VFPFMRX r2, FPEXC		@ VMRS
-	push	{r2}
+	ldr	r3, [vcpu, #VCPU_VFP_HOST]
+	str	r2, [r3, #0]	@ FPEXC is first element
 	orr	r2, r2, #FPEXC_EN
 	VFPFMXR FPEXC, r2		@ VMSR
 #endif
+	/*
+	 * If the host kernel has not been configured with VFPv3 support,
+	 * then it is safer if we deny guests from using it as well.
+	 */
+	set_hcptr vmentry, (HCPTR_TTA | HCPTR_TCP(10) | HCPTR_TCP(11))
+after_vfp_guest_entry:
 
 	@ Configure Hyp-role
 	configure_hyp_role vmentry
 
 	@ Trap coprocessor CRx accesses
 	set_hstr vmentry
-	set_hcptr vmentry, (HCPTR_TTA | HCPTR_TCP(10) | HCPTR_TCP(11))
 	set_hdcr vmentry
 
 	@ Write configured ID register into MIDR alias
@@ -168,19 +191,9 @@ __kvm_vcpu_return:
 #ifdef CONFIG_VFPv3
 	@ Save floating point registers we if let guest use them.
 	tst	r2, #(HCPTR_TCP(10) | HCPTR_TCP(11))
-	bne	after_vfp_restore
-
-	@ Switch VFP/NEON hardware state to the host's
-	add	r7, vcpu, #VCPU_VFP_GUEST
-	store_vfp_state r7
-	add	r7, vcpu, #VCPU_VFP_HOST
-	ldr	r7, [r7]
-	restore_vfp_state r7
-
-after_vfp_restore:
-	@ Restore FPEXC_EN which we clobbered on entry
-	pop	{r2}
-	VFPFMXR FPEXC, r2
+	moveq	r2, #1
+	movne	r2, #0
+	str	r2, [vcpu, #VCPU_VFP_GUEST_ACT]
 #endif
 
 	@ Reset Hyp-role
@@ -478,6 +491,9 @@ switch_to_guest_vfp:
 	store_vfp_state r7
 	add	r7, r0, #VCPU_VFP_GUEST
 	restore_vfp_state r7
+
+	mov	r2, #1
+	str	r2, [vcpu, #VCPU_VFP_GUEST_ACT]
 
 	pop	{r3-r7}
 	read_ccounter	r2

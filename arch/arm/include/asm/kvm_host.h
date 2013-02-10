@@ -97,8 +97,9 @@ struct kvm_vcpu_arch {
 	u32 hpfar;		/* Hyp IPA Fault Address Register */
 
 	/* Floating point registers (VFP and Advanced SIMD/NEON) */
-	struct vfp_hard_struct vfp_guest;
-	struct vfp_hard_struct *vfp_host;
+	union vfp_state vfp_guest;
+	union vfp_state *vfp_host;
+	bool vfp_guest_active;	/* True if hardware contains guest VFP regs */
 
 	/* VGIC state */
 	struct vgic_cpu vgic_cpu;

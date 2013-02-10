@@ -83,15 +83,25 @@ ENTRY(vfp_support_entry)
 	ldr	r4, [r3, r11, lsl #2]	@ vfp_current_hw_state pointer
 	bic	r5, r1, #FPEXC_EX	@ make sure exceptions are disabled
 	cmp	r4, r10			@ this thread owns the hw context?
-#ifndef CONFIG_SMP
-	@ For UP, checking that this thread owns the hw context is
-	@ sufficient to determine that the hardware state is valid.
+#ifdef CONFIG_SMP
+	@ This thread has ownership of the current hardware context.
+	@ However, it may have been migrated to another CPU, in which
+	@ case the saved state is newer than the hardware context.
+	@ Check this by looking at the CPU number which the state was
+	@ last loaded onto.
+	ldr	ip, [r10, #VFP_CPU]
+	teq	ip, r11
+	beq	vfp_hw_state_valid
+#endif
 	beq	vfp_hw_state_valid
 
+#if !defined(CONFIG_SMP) || defined(CONFIG_KVM_ARM_HOST)
 	@ On UP, we lazily save the VFP context.  As a different
 	@ thread wants ownership of the VFP hardware, save the old
 	@ state if there was a previous (valid) owner.
 
+
+	VFPFMRX	r6, FPEXC		@ For, KVM, save the actual h/w fpexc
 	VFPFMXR	FPEXC, r5		@ enable VFP, disable any pending
 					@ exceptions, so we can get at the
 					@ rest of it
@@ -99,6 +109,18 @@ ENTRY(vfp_support_entry)
 	DBGSTR1	"save old state %p", r4
 	cmp	r4, #0			@ if the vfp_current_hw_state is NULL
 	beq	vfp_reload_hw		@ then the hw state needs reloading
+
+
+	@ On SMP, if we're a KVM thread the current hwstate may
+	@ point to VM state, so we must save the current state, otherwise we
+	@ can just skip all this.
+	ldr	ip, [r4, #VFP_KVM]
+	cmp	ip, #0
+#ifdef CONFIG_SMP
+	beq	vfp_reload_hw
+#endif
+	movne	r1, r6
+
 	VFPFSTMIA r4, r5		@ save the working registers
 	VFPFMRX	r5, FPSCR		@ current status
 #ifndef CONFIG_CPU_FEROCEON
@@ -114,19 +136,6 @@ ENTRY(vfp_support_entry)
 vfp_reload_hw:
 
 #else
-	@ For SMP, if this thread does not own the hw context, then we
-	@ need to reload it.  No need to save the old state as on SMP,
-	@ we always save the state when we switch away from a thread.
-	bne	vfp_reload_hw
-
-	@ This thread has ownership of the current hardware context.
-	@ However, it may have been migrated to another CPU, in which
-	@ case the saved state is newer than the hardware context.
-	@ Check this by looking at the CPU number which the state was
-	@ last loaded onto.
-	ldr	ip, [r10, #VFP_CPU]
-	teq	ip, r11
-	beq	vfp_hw_state_valid
 
 vfp_reload_hw:
 	@ We're loading this threads state into the VFP hardware. Update
