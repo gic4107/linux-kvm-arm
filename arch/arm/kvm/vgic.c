@@ -711,8 +711,9 @@ bool vgic_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 
 	if (!irqchip_in_kernel(vcpu->kvm) ||
 	    mmio->phys_addr < base ||
-	    (mmio->phys_addr + mmio->len) > (base + KVM_VGIC_V2_DIST_SIZE))
+	    (mmio->phys_addr + mmio->len) > (base + KVM_VGIC_V2_DIST_SIZE)) {
 		return false;
+	}
 
 	/* We don't support ldrd / strd or ldm / stm to the emulated vgic */
 	if (mmio->len > 4) {
@@ -758,6 +759,8 @@ static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
 
 	switch (mode) {
 	case 0:
+		kvm_debug("vgic_dispatch_sgi mode %d target_cpus %x\n",
+			  mode, target_cpus);
 		if (!target_cpus)
 			return;
 
@@ -827,7 +830,7 @@ static void vgic_update_state(struct kvm *kvm)
 
 	kvm_for_each_vcpu(c, vcpu, kvm) {
 		if (compute_pending_for_cpu(vcpu)) {
-			pr_debug("CPU%d has pending interrupts\n", c);
+			kvm_debug("CPU%d has pending interrupts\n", c);
 			set_bit(c, &dist->irq_pending_on_cpu);
 		}
 	}
@@ -886,8 +889,7 @@ static bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	/* Do we have an active interrupt for the same CPUID? */
 	if (lr != LR_EMPTY &&
 	    (LR_CPUID(vgic_cpu->vgic_lr[lr]) == sgi_source_id)) {
-		kvm_debug("LR%d piggyback for IRQ%d %x\n",
-			  lr, irq, vgic_cpu->vgic_lr[lr]);
+		kvm_debug("LR%d piggyback for IRQ%d\n", lr, irq);
 		BUG_ON(!test_bit(lr, vgic_cpu->lr_used));
 		vgic_cpu->vgic_lr[lr] |= GICH_LR_PENDING_BIT;
 		return true;
@@ -899,7 +901,6 @@ static bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	if (lr >= vgic_cpu->nr_lr)
 		return false;
 
-	kvm_debug("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
 	vgic_cpu->vgic_lr[lr] = MK_LR_PEND(sgi_source_id, irq);
 	vgic_cpu->vgic_irq_lr_map[irq] = lr;
 	set_bit(lr, vgic_cpu->lr_used);
@@ -907,6 +908,7 @@ static bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	if (!vgic_irq_is_edge(vcpu, irq))
 		vgic_cpu->vgic_lr[lr] |= GICH_LR_EOI;
 
+	kvm_debug("LR%d: 0x%08x\n", lr, vgic_cpu->vgic_lr[lr]);
 	return true;
 }
 
@@ -979,7 +981,7 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 	 * move along.
 	 */
 	if (!kvm_vgic_vcpu_pending_irq(vcpu)) {
-		pr_debug("CPU%d has no pending interrupt\n", vcpu_id);
+		kvm_debug("CPU%d has no pending interrupt\n", vcpu_id);
 		goto epilog;
 	}
 
@@ -1020,8 +1022,6 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	bool level_pending = false;
-
-	kvm_debug("MISR = %08x\n", vgic_cpu->vgic_misr);
 
 	if (vgic_cpu->vgic_misr & GICH_MISR_EOI) {
 		/*

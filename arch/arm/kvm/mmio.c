@@ -141,6 +141,15 @@ int io_mem_abort(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	if (vgic_handle_mmio(vcpu, run, &mmio))
 		return 1;
 
+	if (!irqchip_in_kernel(vcpu->kvm) &&
+	    mmio.phys_addr == 0x1c020000 &&
+	    mmio.len == 4 && !mmio.is_write) {
+		/* Fake read! */
+		unsigned long deadbeef = 0xdeadbeef;
+		memcpy(vcpu_reg(vcpu, rt), &deadbeef, 4);
+		return 1;
+	}
+
 	kvm_prepare_mmio(run, &mmio);
 	return 0;
 }
