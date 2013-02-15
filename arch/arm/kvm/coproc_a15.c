@@ -22,6 +22,7 @@
 #include <asm/kvm_host.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_coproc.h>
+#include <asm/kvm_vgic.h>
 #include <linux/init.h>
 
 static void reset_mpidr(struct kvm_vcpu *vcpu, const struct coproc_reg *r)
@@ -58,6 +59,12 @@ static bool access_cbar(struct kvm_vcpu *vcpu,
 {
 	if (p->is_write)
 		return write_to_read_only(vcpu, p);
+
+#ifdef CONFIG_KVM_ARM_VGIC
+	if (irqchip_in_kernel(vcpu->kvm))
+		return vcpu->kvm->arch.vgic.vgic_dist_base & ~((1<<15)-1);
+#endif
+
 	return read_zero(vcpu, p);
 }
 
