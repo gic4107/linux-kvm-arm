@@ -1,33 +1,36 @@
 <!DOCTYPE html>
 <html>
+
   <head>
-    <meta charset='utf-8'>
-    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="KVM/ARM Open Source Project : Staging for all KVM/ARM development" />
 
-    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
-    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
-    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
 
-    <title>KVM/ARM Open Source Project by columbia</title>
+    <title>KVM/ARM Open Source Project</title>
   </head>
 
   <body>
 
-    <header>
-      <div class="container">
-        <h1>KVM/ARM Open Source Project</h1>
-        <h2>Staging for all KVM/ARM development</h2>
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/columbia/linux-kvm-arm">View on GitHub</a>
 
-        <section id="downloads">
-          <a href="https://github.com/columbia/linux-kvm-arm/zipball/master" class="btn">Download as .zip</a>
-          <a href="https://github.com/columbia/linux-kvm-arm/tarball/master" class="btn">Download as .tar.gz</a>
-          <a href="https://github.com/columbia/linux-kvm-arm" class="btn btn-github"><span class="icon"></span>View on GitHub</a>
-        </section>
-      </div>
-    </header>
+          <h1 id="project_title">KVM/ARM Open Source Project</h1>
+          <h2 id="project_tagline">Staging for all KVM/ARM development</h2>
 
-    <div class="container">
-      <section id="main_content">
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/columbia/linux-kvm-arm/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/columbia/linux-kvm-arm/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
         <h3>Welcome to KVM/ARM Open Source Project</h3>
 
 <p>We aim to provide fast, reliable, broad support for ARM virtualization in the Linux kernel.</p>
@@ -38,22 +41,36 @@
 
 <ul>
 <li>kvmarm <em>at</em> lists.cs.columbia.edu</li>
-<li>[<a href="https://lists.cs.columbia.edu/cucslists/listinfo/kvmarm">https://lists.cs.columbia.edu/cucslists/listinfo/kvmarm</a>]. </li>
+<li>
+<a href="https://lists.cs.columbia.edu/cucslists/listinfo/kvmarm">https://lists.cs.columbia.edu/cucslists/listinfo/kvmarm</a>. </li>
 </ul><h3>Development Workflow</h3>
 
-<p>Patches should be sent to the kvmarm mailing list (see above) and should be cc'ed to the linux-arm-kernel mailing list <a href="%5B1%5D">http://www.arm.linux.org.uk/mailinglists/lists.php</a>.</p>
+<p>Patches should be sent to the kvmarm mailing list (see above) and should be cc'ed to the linux-arm-kernel mailing list <a href="http://www.arm.linux.org.uk/mailinglists/lists.php">http://www.arm.linux.org.uk/mailinglists/lists.php</a>.</p>
 
 <p>We maintain two stable (non-rebasing) public branches:</p>
 
 <ul>
 <li>kvm-arm-next: Patches intended for kvm-next, and subsequently the next merge window</li>
 <li>kvm-arm-fixes: Tracks upstream and includes only fixes for -rcX releases.</li>
+</ul><p>We currently have one unstable branch, which rebases any time (please take care accordingly):</p>
+
+<ul>
+<li>kvm-arm-staging: Staging area for patches to go into kvm-arm-next</li>
 </ul><h3>Maintainer</h3>
 
 <p><a href="Christoffer%20Dall">http://www.cs.columbia.edu/~cdall</a> (<a href="https://github.com/chazy" class="user-mention">@chazy</a>) is the maintainer of KVM/ARM.</p>
       </section>
     </div>
 
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">KVM/ARM Open Source Project maintained by <a href="https://github.com/columbia">columbia</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
     
+
   </body>
 </html>
