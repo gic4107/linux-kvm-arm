@@ -21,7 +21,7 @@ AS=$(CROSS_COMPILE)as
 LD=$(CROSS_COMPILE)ld
 OBJCOPY=$(CROSS_COMPILE)objcopy
 
-LDFLAGS = -static
+LDFLAGS = -static -pthread
 
 KERNEL_DIR ?= ../../../../..
 KDIR = $(shell echo $(KERNEL_DIR))
@@ -50,17 +50,24 @@ guest-driver: $(DRIVER_OBJS)
 guest-base.o: guest-base.S
 	$(GCC) $(CFLAGS) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
+guest-smp.o: guest-smp.S
+	$(GCC) $(CFLAGS) -fno-builtin -ffreestanding -O2 -c -o $@ $<
+
 lib1funcs.o: lib1funcs.S
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
 guest-util.o: guest-util.c
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
+smp-core.o: smp-core.c
+	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
+
 %-guest.o: %-guest.c
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
-%-guest: %-guest.o guest.lds guest-base.o guest-util.o lib1funcs.o
-	$(LD) -o $@ --script=guest.lds $< guest-base.o guest-util.o lib1funcs.o
+GUEST_OBJS = guest-base.o guest-util.o lib1funcs.o guest-smp.o smp-core.o
+%-guest: %-guest.o guest.lds $(GUEST_OBJS)
+	$(LD) -o $@ --script=guest.lds $< $(GUEST_OBJS)
 
 %-host.o: %-host.c
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -O2 -c -o $@ $<

@@ -27,6 +27,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <linux/kvm.h>
 #include <asm/kvm.h>
@@ -34,14 +35,20 @@
 #include <err.h>
 #include <getopt.h>
 #include <stddef.h>
- 
+#include <pthread.h>
+#include <signal.h>
 #include "io_common.h"
 #include "guest-driver.h"
 
+#define MAX_VCPUS	2
+
+static int nr_cpus = 1;
 static int sys_fd;
 static int vm_fd;
-static int vcpu_fd;
-static struct kvm_run *kvm_run;
+static int nr_cpus;
+static int vcpu_fd[MAX_VCPUS];
+static struct kvm_run *kvm_run[MAX_VCPUS];
+static pthread_t vcpu_threads[MAX_VCPUS];
 static void *code_base;
 static struct kvm_userspace_memory_region code_mem;
 
@@ -52,26 +59,52 @@ static void create_vm(void)
 		err(EXIT_SETUPFAIL, "kvm_create_vm failed");
 }
 
+static unsigned long vcpu_get_pc(int vcpu_id)
+{
+	int ret;
+	struct kvm_one_reg r;
+	unsigned long pc = 0;
+
+	r.id = KVM_REG_ARM;
+	r.id |= KVM_REG_ARM_CORE;
+	r.id |= KVM_REG_SIZE_U32;
+	r.id |= KVM_REG_ARM_CORE_REG(usr_regs.ARM_pc);
+	r.addr = (unsigned long long)( (unsigned long)(&pc) );
+
+	ret = ioctl(vcpu_fd[vcpu_id], KVM_GET_ONE_REG, &r);
+	if (ret)
+		err(EXIT_FAILURE, "KVM_GET_ONE_REG failed");
+	return pc;
+}
+
 static void create_vcpu(void)
 {
 	int mmap_size;
 	struct kvm_vcpu_init init = { KVM_ARM_TARGET_CORTEX_A15, { 0 } };
+	int i;
 
-	vcpu_fd = ioctl(vm_fd, KVM_CREATE_VCPU, 0);
-	if (vcpu_fd < 0)
-		err(EXIT_SETUPFAIL, "kvm_create_vcpu failed");
-
-	if (ioctl(vcpu_fd, KVM_ARM_VCPU_INIT, &init) != 0)
-		err(EXIT_SETUPFAIL, "KVM_ARM_VCPU_INIT failed");
+	if (nr_cpus > MAX_VCPUS)
+		err(EXIT_SETUPFAIL, "Attempt to create too many VCPUs failed");
 
 	mmap_size = ioctl(sys_fd, KVM_GET_VCPU_MMAP_SIZE, 0);
 	if (mmap_size < 0)
 		err(EXIT_SETUPFAIL, "KVM_GET_VCPU_MMAP_SIZE failed");
 
-	kvm_run = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-		       vcpu_fd, 0);
-	if (kvm_run == MAP_FAILED)
-		err(EXIT_SETUPFAIL, "mmap VCPU run failed!");
+
+	for (i = 0; i < nr_cpus; i++) {
+		vcpu_fd[i] = ioctl(vm_fd, KVM_CREATE_VCPU, i);
+		if (vcpu_fd[i] < 0)
+			err(EXIT_SETUPFAIL, "kvm_create_vcpu failed");
+
+		if (ioctl(vcpu_fd[i], KVM_ARM_VCPU_INIT, &init) != 0)
+			err(EXIT_SETUPFAIL, "KVM_ARM_VCPU_INIT failed");
+
+		kvm_run[i] = mmap(NULL, mmap_size,
+				  PROT_READ | PROT_WRITE, MAP_SHARED,
+				  vcpu_fd[i], 0);
+		if (kvm_run[i] == MAP_FAILED)
+			err(EXIT_SETUPFAIL, "mmap VCPU run failed!");
+	}
 }
 
 static void kvm_register_mem(int id, void *addr, unsigned long base,
@@ -164,19 +197,24 @@ static unsigned long load_code(const char *code_file)
 
 static void init_vcpu(unsigned long start)
 {
+	int i;
 	struct kvm_one_reg reg;
 	__u32 lr = CODE_PHYS_BASE + RAM_SIZE;
 	__u64 core_id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_CORE;
 
-	reg.id = core_id | KVM_REG_ARM_CORE_REG(usr_regs.ARM_pc);
-	reg.addr = (long)&start;
-	if (ioctl(vcpu_fd, KVM_SET_ONE_REG, &reg) != 0)
-		err(EXIT_SETUPFAIL, "error setting PC (%#llx)", reg.id);
+	for (i = 0; i < nr_cpus; i++) {
+		int fd = vcpu_fd[i];
 
-	reg.id = core_id | KVM_REG_ARM_CORE_REG(svc_regs[2]);
-	reg.addr = (long)&lr;
-	if (ioctl(vcpu_fd, KVM_SET_ONE_REG, &reg) != 0)
-		err(EXIT_SETUPFAIL, "error setting LR");
+		reg.id = core_id | KVM_REG_ARM_CORE_REG(usr_regs.ARM_pc);
+		reg.addr = (long)&start;
+		if (ioctl(fd, KVM_SET_ONE_REG, &reg) != 0)
+			err(EXIT_SETUPFAIL, "error setting PC (%#llx)", reg.id);
+
+		reg.id = core_id | KVM_REG_ARM_CORE_REG(svc_regs[2]);
+		reg.addr = (long)&lr;
+		if (ioctl(fd, KVM_SET_ONE_REG, &reg) != 0)
+			err(EXIT_SETUPFAIL, "error setting LR");
+	}
 }
 
 static void init_vgic(void)
@@ -209,7 +247,7 @@ static void init_vgic(void)
 }
 
 /* Returns true to shut down. */
-static bool handle_mmio(struct kvm_run *kvm_run,
+static bool handle_mmio(struct kvm_run *kvm_run, int vcpu_id,
 			bool (*test)(struct kvm_run *kvm_run, int vcpu_fd))
 {
 	unsigned long phys_addr;
@@ -241,15 +279,16 @@ static bool handle_mmio(struct kvm_run *kvm_run,
 		printf("%c", data[0]);
 		return false;
 
-	case IO_CTL_EXIT:
+	case IO_CTL_EXIT: {
+		/* Kill other CPUs */
 		printf("VM shutting down status %i\n", data[0]);
 		if (data[0] != 0)
 			exit(data[0]);
-		return true;
-
+		exit(1);
+	}
 	default:
 		/* Let this test handle it. */
-		if (test && test(kvm_run, vcpu_fd))
+		if (test && test(kvm_run, vcpu_fd[vcpu_id]))
 			return false;
 		errx(EXIT_FAILURE,
 		     "Guest accessed unexisting mem area: %#08lx + %#08x",
@@ -257,16 +296,32 @@ static bool handle_mmio(struct kvm_run *kvm_run,
 	}
 }
 
-static void kvm_cpu_exec(bool (*test)(struct kvm_run *kvm_run, int vcpu_fd))
-{
-	do {
-		int ret = ioctl(vcpu_fd, KVM_RUN, 0);
+struct cpu_exec_args {
+	bool (*test_fn)(struct kvm_run *kvm_run, int vcpu_fd);
+	int vcpu_id;
+};
 
-		if (ret == -EINTR || ret == -EAGAIN) {
-			continue;
-		} else if (ret < 0)
+static void *kvm_cpu_exec(void *opaque)
+{
+	struct cpu_exec_args *args = (struct cpu_exec_args *)opaque;
+	int id = args->vcpu_id;
+
+	do {
+		int ret = ioctl(vcpu_fd[id], KVM_RUN, 0);
+
+#if 0
+		if (id == 1) {
+			printf("cpu1 returned from run!\n");
+		}
+#endif
+
+		if (ret != -EINTR && ret != -EAGAIN && ret < 0) {
+			fprintf(stderr, "err at 0x%08lx\n", vcpu_get_pc(id));
 			err(EXIT_SETUPFAIL, "Error running vcpu");
-	} while (!handle_mmio(kvm_run, test));
+		}
+	} while (!handle_mmio(kvm_run[id], id, args->test_fn));
+
+	return NULL;
 }
 
 /* Linker-generated symbols for GUEST_TEST() macros */
@@ -288,18 +343,24 @@ static void usage(int argc, char * const *argv)
 
 int main(int argc, char * const *argv)
 {
-	struct test *i;
+	struct test *tptr;
 	const char *file = NULL;
 	bool (*test)(struct kvm_run *kvm_run, int vcpu_fd);
 	unsigned long start;
 	int opt;
 	bool use_vgic = false;
 	char *test_name;
+	int ret, i;
 
-	while ((opt = getopt(argc, argv, "v")) != -1) {
+	nr_cpus = 1;
+
+	while ((opt = getopt(argc, argv, "vm")) != -1) {
 		switch (opt) {
 		case 'v':
 			use_vgic = true;
+			break;
+		case 'm':
+			nr_cpus = 2;
 			break;
 		default:
 			usage(argc, argv);
@@ -310,10 +371,10 @@ int main(int argc, char * const *argv)
 		usage(argc, argv);
 
 	test_name = argv[optind];
-	for (i = __start_tests; i < __stop_tests; i++) {
-		if (strcmp(i->name, test_name) == 0) {
-			test = i->mmiofn;
-			file = i->binname;
+	for (tptr = __start_tests; tptr < __stop_tests; tptr++) {
+		if (strcmp(tptr->name, test_name) == 0) {
+			test = tptr->mmiofn;
+			file = tptr->binname;
 			break;
 		}
 	}
@@ -333,6 +394,24 @@ int main(int argc, char * const *argv)
 	start = load_code(file);
 	create_vcpu();
 	init_vcpu(start);
-	kvm_cpu_exec(test);
+
+	for (i = 0; i < nr_cpus; i++) {
+		struct cpu_exec_args *a;
+		a = malloc(sizeof(struct cpu_exec_args));
+		if (!a)
+			errx(EXIT_SETUPFAIL, "Out of address space?!?");
+		a->test_fn = test;
+		a->vcpu_id = i;
+
+		ret = pthread_create(&vcpu_threads[i], NULL,
+				     kvm_cpu_exec, a);
+		if (ret)
+			errx(EXIT_SETUPFAIL, "Pthread create failed");
+	}
+
+	for (i = 0; i < nr_cpus; i++) {
+		pthread_join(vcpu_threads[i], NULL);
+	}
+
 	return EXIT_SUCCESS;
 }

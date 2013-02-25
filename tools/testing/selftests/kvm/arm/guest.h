@@ -62,4 +62,30 @@ static inline void writel(unsigned long addr, unsigned long val)
 
 /* Each guest needs to write this. */
 int test(void);
+
+/* Secondary CPUs write to this value */
+extern bool second_cpu_up;
+
+static inline void dmb(void)
+{
+	asm volatile ("dmb");
+}
+
+static inline void dsb(void)
+{
+	asm volatile ("dsb");
+}
+
+static inline void isb(void)
+{
+	asm volatile ("isb");
+}
+
+static inline void clean_cache(void *addr)
+{
+	unsigned long reg = (unsigned long)addr;
+	asm volatile("mcr p15, 0, %[reg], c7, c14, 1": : [reg] "r" (reg));
+	isb();
+}
+
 #endif /* GUEST_H */

@@ -216,7 +216,7 @@ static void ignore(const struct test32 *test)
 static void report_cache(unsigned int level, bool icache_only)
 {
 	u32 ccsidr;
-	const char *wb_wt;
+	const char *wb_wt = NULL;
 
 	/* Write to CSSELR, read from CCSIDR */
 	if (!cp15_write(2, 0, 0, 0, (level << 1) | icache_only)) {

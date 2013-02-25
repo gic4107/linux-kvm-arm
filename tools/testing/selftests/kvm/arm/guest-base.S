@@ -22,10 +22,18 @@
 
 start:
 	@ Set SCTLR.V
-	mrc p15, 0, r1, c1, c0, 0
-	orr r1, r1, #(1 << 13)
-	mcr p15, 0, r1, c1, c0, 0
+	mrc	p15, 0, r1, c1, c0, 0
+	orr	r1, r1, #(1 << 13)
+	mcr	p15, 0, r1, c1, c0, 0
 
+	@ Read MPID
+	mrc	p15, 0, r2, c0, c0, 5
+	and	r2, r2, #3
+	cmp	r2, #0
+	beq	primary
+	b	secondary_start
+
+primary:
 	@ Set up stack
 	ldr	sp, =stacktop
 	bl	test
@@ -82,8 +90,24 @@ data_abort:
 	b	abort
 
 irq:
+	bl	smp_test
 	ldr	r0, =irq_msg
-	b	abort
+	push	{r0}
+	mrc	p15, 0, r0, c0, c0, 5
+	and	r0, r0, #3
+	cmp	r0, #0
+	pop	{r0}
+
+	# Primary CPUs should not receive IRQs
+	beq	abort
+
+	# Seconday CPUs should perform an exception return
+	push	{lr}
+99:	bl	smp_interrupt
+	b	99b
+	pop	{lr}
+	@subs	pc, lr, #-4
+	movs	pc, lr
 
 fiq:
 	ldr	r0, =fiq_msg

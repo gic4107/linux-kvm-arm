@@ -5,13 +5,14 @@
 
 __asm__(".arch_extension	virt");
 
-//#define DEBUG 1
+#define DEBUG 1
 
 #define GOAL (1ULL << 28)
 
 #define ARR_SIZE(_x) ((sizeof(_x) / sizeof(_x[0])))
 
 static unsigned long vgic_base;
+static const int sgi_irq = 1; /* just use IRQ number 0 */
 
 #if 0
 typedef unsigned long long u64;
@@ -48,9 +49,24 @@ static void hvc_test(void)
 	asm volatile("hvc #0");
 }
 
-static void mmio_vgic_init(void)
+static void vgic_init(void)
 {
+	if (vgic_base)
+		return; /* already init'ed */
 	vgic_base = VGIC_DIST_BASE;
+
+	writel(vgic_base + GICD_CTLR, 0x1); /* enable distributor */
+	writel(vgic_base + GICD_ISENABLE(sgi_irq), ISENABLE_IRQ(sgi_irq));
+
+	dsb();
+	dmb();
+	isb();
+}
+
+static int mmio_vgic_init(void)
+{
+	vgic_init();
+	return 0;
 }
 
 static void mmio_vgic_test(void)
@@ -58,15 +74,55 @@ static void mmio_vgic_test(void)
 	(void)readl(vgic_base);
 }
 
+static int ipi_init(void)
+{
+	vgic_init();
+	//unsigned counter = 1U << 28;
+
+	/* Give it a chance... */
+	while (!second_cpu_up) {
+		dsb();
+		dmb();
+		isb();
+		clean_cache(&second_cpu_up);
+	}
+
+	if (!second_cpu_up) {
+		printf("ipi_init: no secondary CPU\n");
+		return -1;
+	} else {
+		printf("ipi_init: secondary CPU is up!\n");
+	}
+
+	return 0;
+}
+
+static void ipi_test(void)
+{
+	unsigned long val;
+
+	/* Signal IRQ 0 to CPU 1 */
+	val = SGIR_FORMAT(1, sgi_irq);
+
+	writel(vgic_base + GICD_SGIR, val);
+	dsb();
+	dmb();
+	isb();
+}
+
 static void mmio_fake_test(void)
 {
 	(void)readl(FAKE_MMIO);
 }
 
+static void noop_guest(void)
+{
+}
+
 struct exit_test {
 	char *name;
 	void (*test_fn)(void);
-	void (*init_fn)(void);
+	int (*init_fn)(void);
 };
 
 static void loop_test(struct exit_test *test)
@@ -100,18 +156,34 @@ static struct exit_test available_tests[] = {
 	{ "hvc",		hvc_test,		NULL		},
 	{ "vgic_mmio",		mmio_vgic_test,		mmio_vgic_init	},
 	{ "fake_mmio",		mmio_fake_test,		NULL		},
+	{ "ipi",		ipi_test,		ipi_init	},
+	{ "noop_guest",		noop_guest,		NULL		},
 };
 
 int test(void)
 {
 	unsigned int i;
 	struct exit_test *test;
+	int ret;
+
+	ipi_init();
+	ipi_test();
+
+	while (1);
+
+
+	return 0;
 
 	for (i = 0; i < ARR_SIZE(available_tests); i++) {
 		test = &available_tests[i];
-		if (test->init_fn)
-			test->init_fn();
-		loop_test(test);
+		ret = 0;
+		if (test->init_fn) {
+			ret = test->init_fn();
+			if (ret)
+				printf("skipping test: %s\n", test->name);
+		}
+		if (!ret)
+			loop_test(test);
 	}
 
 	return 0;
