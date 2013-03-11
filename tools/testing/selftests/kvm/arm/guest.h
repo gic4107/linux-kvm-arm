@@ -35,6 +35,11 @@ static inline void print(const char *p)
 
 typedef uint32_t u32;
 
+#ifdef DEBUG
+#define debug(args...) printf(args)
+#else
+#define debug(args...)
+#endif
 
 static inline unsigned char readb(unsigned long addr)
 {

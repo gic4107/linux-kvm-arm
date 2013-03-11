@@ -128,9 +128,11 @@ void enable_mmu(int cpu)
 	ttbr0 = (unsigned long long)pgd_ptr & (~(0x1fULL));
 	set_ttbr0(ttbr0);
 
+	isb();
 	sctlr = get_sctlr();
 	sctlr |= SCTLR_M | SCTLR_C | SCTLR_I;
 	set_sctlr(sctlr);
+	isb();
 
 	debug("core[%u]: mmu enabled!\n", cpu);
 }
