@@ -76,7 +76,7 @@ GUEST_OBJS = guest-base.o guest-util.o lib1funcs.o guest-smp.o smp-core.o mmu.o
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -O2 -c -o $@ $<
 
 clean distclean:
-	rm -f $(GUESTS) $(HOST_DRIVERS) guest-driver guest-base.o $(OBJS)
+	rm -f $(GUESTS) $(HOST_DRIVERS) guest-driver guest-base.o $(OBJS) $(GUEST_OBJS)
 
 # This assumes we're not cross-compiling!
 run_tests: all
