@@ -7,8 +7,8 @@
 #define EXIT_SETUPFAIL 2
 
 #define CODE_SLOT 0
-#define CODE_PHYS_BASE (0xFFFE0000)
-#define RAM_SIZE 0x20000 /* 128k of physical RAM , yeah! */
+#define CODE_PHYS_BASE (0xFFE00000)
+#define RAM_SIZE 0x200000 /* 2M of physical RAM , yeah! */
 #define PHYS_OFFSET(_addr)	(_addr & ~(CODE_PHYS_BASE))
 
 struct kvm_run;
