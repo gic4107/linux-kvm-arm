@@ -86,7 +86,7 @@ static void ipi_test(void)
 {
 	unsigned long val;
 
-	/* Signal IRQ 0 to CPU 1 */
+	/* Signal IPI/SGI IRQ to CPU 1 */
 	val = SGIR_FORMAT(1, sgi_irq);
 
 	writel(vgic_base + GICD_SGIR, val);
@@ -152,8 +152,6 @@ int test(int smp_cpus, int vgic_enabled)
 
 	nr_cpus = smp_cpus;
 	use_vgic = vgic_enabled;
-
-	printf("getting here on first core...\n");
 
 	for (i = 0; i < ARR_SIZE(available_tests); i++) {
 		test = &available_tests[i];
