@@ -17,6 +17,7 @@ static u64 pgd_mem[8] __attribute__ ((aligned (32)));
 
 #define SCTLR_M		(0x1 << 0)
 #define SCTLR_C		(0x1 << 2)
+#define SCTLR_I		(0x1 << 12)
 
 
 static inline void set_ttbr1(unsigned long long value)
@@ -105,7 +106,7 @@ void enable_mmu(int cpu)
 		pgd[i] |= PGD_AF | PGD_SH | PGD_TYPE_BLOCK;
 		if (i < 3) {
 			/* HACK !!! */
-			pgd[i] |= (1 << 2); /* MAIR0 attr 0 */
+			pgd[i] |= (1 << 2); /* MAIR0 attr1 */
 		}
 	}
 	dsb();
@@ -119,7 +120,7 @@ void enable_mmu(int cpu)
 	 *  attr0, normal memory
 	 *  attr1, device memory
 	 */
-	mair0 = 0x44;
+	mair0 = 0xff;
 	mair0 |= (0x04) << 8;
 	set_mair0(mair0);
 
@@ -128,9 +129,8 @@ void enable_mmu(int cpu)
 	set_ttbr0(ttbr0);
 
 	sctlr = get_sctlr();
-	//sctlr |= SCTLR_M | SCTLR_C;
-	sctlr |= SCTLR_M;
+	sctlr |= SCTLR_M | SCTLR_C | SCTLR_I;
 	set_sctlr(sctlr);
 
-	printf("core[%u]: mmu enabled!\n", cpu);
+	debug("core[%u]: mmu enabled!\n", cpu);
 }
