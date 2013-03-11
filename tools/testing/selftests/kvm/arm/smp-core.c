@@ -19,7 +19,31 @@ void smp_test(int cpu)
 
 void smp_interrupt(void)
 {
-	printf("core[1]: received interrupt\n");
+	unsigned long ack, eoi;
+	int irq, cpu;
+
+	debug("core[1]: received interrupt\n");
+
+	ack = readl(VGIC_CPU_BASE + GICC_IAR);
+	irq = IAR_IRQID(ack);
+	cpu = IAR_CPUID(ack);
+
+	debug("core[1]: received interrupt %u (src_cpu %u)\n", irq, cpu);
+
+	if (irq <= 15) {
+		/* SGI */
+		assert(cpu == 0);
+	} else {
+		printf("unknown IRQID: %u\n", irq);
+		fail();
+	}
+
+	/* EOI the interrupt */
+	eoi = MK_EOIR(cpu, irq);
+	writel(VGIC_CPU_BASE + GICC_EOIR, eoi);
+	dsb();
+	dmb();
+
 }
 
 void smp_gic_enable(int smp_cpus, int vgic_enabled)

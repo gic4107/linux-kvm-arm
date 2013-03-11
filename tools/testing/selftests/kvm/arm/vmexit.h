@@ -9,11 +9,18 @@
 
 #define GICC_CTLR		0x00000000
 #define GICC_PMR		0x00000004
+#define GICC_IAR		0x0000000c
+#define GICC_EOIR		0x00000010
 
 #define GICD_CTLR		0x00000000
 #define GICD_ISENABLE(_n)	(0x00000100 + ((_n / 32) * 4))
 #define GICD_SGIR		0x00000f00
 #define GICD_SPENDSGI		0x00000f20
+
+#define IAR_CPUID(_iar)		((_iar >> 10) & 0x7)
+#define IAR_IRQID(_iar)		((_iar >> 0) & 0x3ff)
+
+#define MK_EOIR(_cpuid, _irqid)	((((_cpuid) & 0x7) << 10) | ((_irqid) & 0x3ff))
 
 #define ISENABLE_IRQ(_irq)	(1UL << (_irq % 32))
 
@@ -28,6 +35,8 @@
 	((1UL << _target_cpu) << SGIR_CPU_TARGET_LIST_SHIFT) | \
 	((_irq_num) & SGIR_IRQ_MASK) | \
 	SGIR_NSATTR)
+
+extern const int sgi_irq;
 	
 
 #endif /* _VMEXIT_H_ */
