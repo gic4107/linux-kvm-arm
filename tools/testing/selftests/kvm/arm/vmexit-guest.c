@@ -5,8 +5,6 @@
 
 __asm__(".arch_extension	virt");
 
-#define DEBUG 1
-
 #define GOAL (1ULL << 26)
 
 #define ARR_SIZE(_x) ((sizeof(_x) / sizeof(_x[0])))
@@ -15,7 +13,7 @@ static int nr_cpus;
 static bool use_vgic;
 
 static unsigned long vgic_base;
-static const int sgi_irq = 1; /* just use IRQ number 0 */
+const int sgi_irq = 1; /* just use IRQ number 1 */
 
 
 static unsigned long read_cc(void)
@@ -46,8 +44,11 @@ static void vgic_init(void)
 
 static int mmio_vgic_init(void)
 {
-	if (!use_vgic)
-		return -1;
+	if (!use_vgic) {
+		/* Fake measure */
+		vgic_base = VGIC_DIST_BASE;
+		return 0;
+	}
 
 	vgic_init();
 	return 0;
@@ -67,14 +68,14 @@ static int ipi_init(void)
 
 	vgic_init();
 
-	printf("core[0]: first cpu up\n");
+	debug("core[0]: first cpu up\n");
 
 	while (!second_cpu_up && counter--);
 
 	if (!second_cpu_up)
 		return -1;
 
-	printf("core[0]: second cpu up\n");
+	debug("core[0]: second cpu up\n");
 
 	first_cpu_ack = true;
 
@@ -127,21 +128,20 @@ static void loop_test(struct exit_test *test)
 		cycles = c2 - c1;
 	} while (cycles < GOAL);
 
-#if DEBUG
-	printf("%s exit %u cycles over %u iterations = %u\n",
+	debug("%s exit %u cycles over %u iterations = %u\n",
 	       test->name, cycles, iterations, cycles / iterations);
-#else
 	printf("%s\t%u\n",
 	       test->name, cycles / iterations);
-#endif
 }
 
 static struct exit_test available_tests[] = {
+	{ "noop_guest",		noop_guest,		NULL		},
 	{ "hvc",		hvc_test,		NULL		},
 	{ "vgic_mmio",		mmio_vgic_test,		mmio_vgic_init	},
 	{ "fake_mmio",		mmio_fake_test,		NULL		},
+#if 0
 	{ "ipi",		ipi_test,		ipi_init	},
-	{ "noop_guest",		noop_guest,		NULL		},
+#endif
 };
 
 int test(int smp_cpus, int vgic_enabled)
