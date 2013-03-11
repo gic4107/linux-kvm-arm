@@ -1,3 +1,5 @@
+#define DEBUG 1
+
 #include "guest.h"
 #include "guest-util.h"
 #include "mmio_test.h"
@@ -99,8 +101,9 @@ void enable_mmu(int cpu)
 	unsigned long mair0;
 	u64 *pgd;
 
+
 	/* Set up an identitify mapping */
-	pgd = pgd_mem + (4 * cpu);
+	pgd = &pgd_mem[4 * cpu];
 	for (i = 0; i < 4; i++) {
 		pgd[i] = (i * PGD_SIZE);
 		pgd[i] |= PGD_AF | PGD_SH | PGD_TYPE_BLOCK;
@@ -128,9 +131,11 @@ void enable_mmu(int cpu)
 	ttbr0 = (unsigned long long)pgd_ptr & (~(0x1fULL));
 	set_ttbr0(ttbr0);
 
+	while (get_cpuid() == 0);
+
 	sctlr = get_sctlr();
 	sctlr |= SCTLR_M | SCTLR_C | SCTLR_I;
 	set_sctlr(sctlr);
 
-	debug("core[%u]: mmu enabled!\n", cpu);
+	debug("core[%u]: mmu enabled! (0x%x)\n", cpu, get_sp());
 }

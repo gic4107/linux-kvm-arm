@@ -109,4 +109,18 @@ static inline void cpu_sev(void)
 	asm volatile("sev");
 }
 
+static inline unsigned long get_sp(void)
+{
+	unsigned long sp;
+	asm volatile("mov %[sp], sp": [sp] "=r" (sp));
+	return sp;
+}
+
+static inline unsigned long get_cpuid(void)
+{
+	unsigned long id;
+	asm volatile("mrc p15, 0, %[id], c0, c0, 5": [id] "=r" (id));
+	return (id & 0x3);
+}
+
 #endif /* GUEST_H */

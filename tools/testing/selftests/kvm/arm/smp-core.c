@@ -1,3 +1,5 @@
+#define DEBUG 1
+
 #include "guest.h"
 #include "vmexit.h"
 #include "guest.h"

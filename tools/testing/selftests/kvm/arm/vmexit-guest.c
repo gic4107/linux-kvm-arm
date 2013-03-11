@@ -1,3 +1,5 @@
+#define DEBUG 1
+
 #include "guest.h"
 #include "guest-util.h"
 #include "mmio_test.h"
