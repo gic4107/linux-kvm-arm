@@ -98,3 +98,9 @@ void __guest_div0(void)
 	printf("division by 0\n");
 	fail();
 }
+
+void guest_abort_exception(int cpu, unsigned long addr, unsigned long pc)
+{
+	printf("core[%u]: unexpected abort on: 0x%x (lr: 0x%x)\n",
+	       cpu, addr, pc);
+}

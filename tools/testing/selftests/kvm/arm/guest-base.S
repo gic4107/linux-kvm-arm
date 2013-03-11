@@ -92,10 +92,20 @@ svc:
 	b	abort
 
 prefetch_abort:
+	mrc	p15, 0, r0, c0, c0, 5
+	and	r0, r0, #3
+	mrc	p15, 0, r1, c6, c0, 2
+	mov	r2, lr
+	bl	guest_abort_exception
 	ldr	r0, =prefetch_msg
 	b	abort
 
 data_abort:
+	mrc	p15, 0, r0, c0, c0, 5
+	and	r0, r0, #3
+	mrc	p15, 0, r1, c6, c0, 2
+	mov	r2, lr
+	bl	guest_abort_exception
 	ldr	r0, =data_msg
 	b	abort
 
