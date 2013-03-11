@@ -73,6 +73,14 @@ putc:
 	strb	r0, [r1]
 	mov	pc, lr
 
+.macro	svc_stub
+	mrs	sp, cpsr
+	bic	sp, sp, #0x1f
+	orr	sp, sp, #0x13
+	msr	cpsr_cxsf, sp
+	isb
+.endm
+
 .section .text.extable
 	b	impossible
 	b	undef
@@ -96,6 +104,7 @@ prefetch_abort:
 	and	r0, r0, #3
 	mrc	p15, 0, r1, c6, c0, 2
 	mov	r2, lr
+	svc_stub /* re-establish stack */
 	bl	guest_abort_exception
 	ldr	r0, =prefetch_msg
 	b	abort
@@ -105,35 +114,29 @@ data_abort:
 	and	r0, r0, #3
 	mrc	p15, 0, r1, c6, c0, 2
 	mov	r2, lr
+	svc_stub /* re-establish stack */
 	bl	guest_abort_exception
 	ldr	r0, =data_msg
 	b	abort
 
-irq:
-	bl	smp_test
-	ldr	r0, =irq_msg
-	push	{r0}
-	mrc	p15, 0, r0, c0, c0, 5
+irq:	mrc	p15, 0, r0, c0, c0, 5
 	and	r0, r0, #3
 	cmp	r0, #0
-	pop	{r0}
 
 	# Primary CPUs should not receive IRQs
+	ldreq	r0, =irq_msg
 	beq	abort
 
-	# Seconday CPUs should perform an exception return
-	push	{lr}
-99:	bl	smp_interrupt
-	b	99b
-	pop	{lr}
-	@subs	pc, lr, #-4
-	movs	pc, lr
+	# Seconday CPUs should perform an exception return (with IRQ disabled)
+	ldreq	r0, =irq2_msg
+	beq	abort
 
 fiq:
 	ldr	r0, =fiq_msg
 	b	abort
 
 undef:
+	/* TODO: Stack? */
 	push	{r1,r2}
 	ldr	r1, =skip_undef
 	ldr	r1, [r1]
@@ -181,5 +184,7 @@ data_msg:
 	.asciz	"Data abort!\n"
 irq_msg:
 	.asciz	"IRQ exception!\n"
+irq2_msg:
+	.asciz	"IRQ exception on secondary core!\n"
 fiq_msg:
 	.asciz	"FIQ exception!\n"
