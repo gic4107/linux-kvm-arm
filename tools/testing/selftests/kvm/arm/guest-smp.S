@@ -25,7 +25,7 @@
 	.globl secondary_start
 secondary_start:
 	@ Set up stack
-	ldr	sp, =stacktop_secondary
+	ldr	sp, =secondary_stacktop
 
 	@ Enable the MMU
 	mov	r0, #1
@@ -48,11 +48,3 @@ secondary_start:
 	b	1b
 
 .ltorg
-
-
-/* Have some local stack space for the second cpu */
-	.rept 1024
-	.word 0
-	.endr
-stacktop_secondary:
-	.word 0
