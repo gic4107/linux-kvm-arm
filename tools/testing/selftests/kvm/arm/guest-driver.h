@@ -28,4 +28,10 @@ struct test {
 
 typedef uint32_t u32;
 
+#ifdef DEBUG
+#define debug(args...) printf(args)
+#else
+#define debug(args...)
+#endif
+
 #endif /* __GUEST_DRIVER_H_ */

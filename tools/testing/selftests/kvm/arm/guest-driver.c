@@ -17,6 +17,8 @@
  */
 #define _GNU_SOURCE
 
+//#define DEBUG 1
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -282,7 +284,7 @@ static bool handle_mmio(struct kvm_run *kvm_run, int vcpu_id,
 		if (!is_write)
 			errx(EXIT_SETUPFAIL, "Guest read from IO_CTL_STATUS");
 		if (data[0] == 0) {
-			printf(".");
+			debug(".");
 			return false;
 		} else {
 			errx(EXIT_FAILURE, "TEST FAIL");
@@ -334,12 +336,12 @@ void set_cpu_affinity(int cpuid)
 	if (s != 0)
 		err(EXIT_SETUPFAIL, "Can't get affinity?");
 
-	printf("cpu[%d]: affinity: ");
+	debug("cpu[%d]: affinity: ");
 	for (i = 0; i < 4; i++) {
 		if (CPU_ISSET(i, &cpuset))
-			printf("cpu%d, ", i);
+			debug("cpu%d, ", i);
 	}
-	printf("\n");
+	debug("\n");
 }
 
 static void *kvm_cpu_exec(void *opaque)
@@ -347,7 +349,7 @@ static void *kvm_cpu_exec(void *opaque)
 	struct cpu_exec_args *args = (struct cpu_exec_args *)opaque;
 	int id = args->vcpu_id;
 
-	//set_cpu_affinity(id);
+	set_cpu_affinity(id);
 
 	do {
 		int ret = ioctl(vcpu_fd[id], KVM_RUN, 0);
@@ -417,7 +419,7 @@ int main(int argc, char * const *argv)
 	if (!file)
 		errx(EXIT_SETUPFAIL, "Unknown test '%s'", argv[1]);
 
-	printf("Starting VM with code from: %s\n", file);
+	debug("Starting VM with code from: %s\n", file);
 
 	sys_fd = open("/dev/kvm", O_RDWR);
 	if (sys_fd < 0)
