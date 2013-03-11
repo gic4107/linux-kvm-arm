@@ -62,10 +62,13 @@ guest-util.o: guest-util.c
 smp-core.o: smp-core.c
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
+mmu.o: mmu.c
+	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
+
 %-guest.o: %-guest.c
 	$(GCC) $(CFLAGS) $(CFLAGS_$@) -fno-builtin -ffreestanding -O2 -c -o $@ $<
 
-GUEST_OBJS = guest-base.o guest-util.o lib1funcs.o guest-smp.o smp-core.o
+GUEST_OBJS = guest-base.o guest-util.o lib1funcs.o guest-smp.o smp-core.o mmu.o
 %-guest: %-guest.o guest.lds $(GUEST_OBJS)
 	$(LD) -o $@ --script=guest.lds $< $(GUEST_OBJS)
 

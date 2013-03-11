@@ -9,6 +9,7 @@
 #define CODE_SLOT 0
 #define CODE_PHYS_BASE (0xFFFE0000)
 #define RAM_SIZE 0x20000 /* 128k of physical RAM , yeah! */
+#define PHYS_OFFSET(_addr)	(_addr & ~(CODE_PHYS_BASE))
 
 struct kvm_run;
 struct test {

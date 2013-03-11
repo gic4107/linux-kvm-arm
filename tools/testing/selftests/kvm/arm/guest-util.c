@@ -6,19 +6,31 @@ void printf(const char *fmt, ...)
 {
 	va_list ap;
 	unsigned val;
+	unsigned long long llval;
 	char intbuf[20], *p;
+	unsigned long numlen = 4;
+	bool modifier = false;
 
 	va_start(ap, fmt);
 	while (*fmt) {
-		if (*fmt != '%') {
+		if (*fmt != '%' && !modifier) {
 			putc(*(fmt++));
 			continue;
+		} else if (*fmt == '%') {
+			fmt++;
+			numlen = 4;
 		}
-		fmt++;
+		modifier = false;
+
 		switch (*fmt) {
 		case 'u':
 			fmt++;
-			val = va_arg(ap, int);
+			if (numlen == 8) {
+				llval = va_arg(ap, unsigned long long);
+				val = (unsigned long)llval; /* TODO! */
+			} else {
+				val = va_arg(ap, int);
+			}
 			if (!val) {
 				putc('0');
 				continue;
@@ -33,25 +45,41 @@ void printf(const char *fmt, ...)
 			break;
 		case 'x':
 			fmt++;
-			val = va_arg(ap, int);
-			if (!val) {
+
+			if (numlen == 8) {
+				llval = va_arg(ap, unsigned long long);
+				p = &intbuf[15];
+			} else {
+				val = va_arg(ap, int);
+				llval = (unsigned long long)val;
+				p = &intbuf[7];
+			}
+
+			if (!llval) {
 				putc('0');
 				continue;
 			}
 
-			p = &intbuf[7];
 			*(p--) = '\0';
-			while (val) {
-				unsigned rem = val % 16;
+			while (llval) {
+				unsigned long long rem = llval % 16;
 				if (rem > 9)
-					*(p--) = (rem - 10) + 'a';
+					*(p--) = (rem - 10ULL) + 'a';
 				else
 					*(p--) = rem + '0';
-				val /= 16;
+				llval /= 16ULL;
 			}
 			print(p+1);
 			break;
+		case 'l':
+			fmt++;
+			modifier = true;
+			if (*fmt == 'l') {
+				numlen = 8;
+				fmt++;
+			}
 
+			break;
 		case 's':
 			fmt++;
 			p = va_arg(ap, char *);

@@ -20,7 +20,13 @@
 	.arm
 	.section .start, "x"
 
+/*
+ * void start(int smp, int vgic_enabled);
+ */
 start:
+	mov	r9, r0
+	mov	r10, r1
+
 	@ Set SCTLR.V
 	mrc	p15, 0, r1, c1, c0, 0
 	orr	r1, r1, #(1 << 13)
@@ -36,6 +42,10 @@ start:
 primary:
 	@ Set up stack
 	ldr	sp, =stacktop
+	mov	r0, #0
+	bl	enable_mmu
+	mov	r0, r9
+	mov	r1, r10
 	bl	test
 	ldr	r1, =IO_CTL_EXIT
 	strb	r0, [r1]

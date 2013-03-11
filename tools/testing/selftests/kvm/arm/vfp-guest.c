@@ -28,7 +28,7 @@ static void turn_on_coproc_access(void)
 	asm volatile("mcr p15, 0, %0, c1, c0, 2" : : "r" (cpacr));
 }
 
-int test(void)
+int test(int smp_cpus, int vgic_enabled)
 {
 	double d1, d2, d3;
 	register double d0 asm("d0");

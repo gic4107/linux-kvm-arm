@@ -7,35 +7,16 @@ __asm__(".arch_extension	virt");
 
 #define DEBUG 1
 
-#define GOAL (1ULL << 28)
+#define GOAL (1ULL << 26)
 
 #define ARR_SIZE(_x) ((sizeof(_x) / sizeof(_x[0])))
+
+static int nr_cpus;
+static bool use_vgic;
 
 static unsigned long vgic_base;
 static const int sgi_irq = 1; /* just use IRQ number 0 */
 
-#if 0
-typedef unsigned long long u64;
-
-static u64 pgd[4] __attribute__ ((aligned (32)));
-
-#define PGD_SHIFT 30
-#define PGD_SIZE (1 << PGD_SHIFT)
-#define PGD_AF   (1 << 10) /* Don't raise access flag exceptions */
-#define PGD_SH	 (3 << 8) /* All memory inner+outer shareable */
-
-static void enable_mmu(void)
-{
-	unsigned long long i;
-
-	/* Set up an identitify mapping */
-	for (i = 0; i < 4; i++) {
-		pgd[i] = (i * PGD_SIZE);
-		pgd[i] |= PGD_AF | PGD_SH
-
-	}
-}
-#endif
 
 static unsigned long read_cc(void)
 {
@@ -65,6 +46,9 @@ static void vgic_init(void)
 
 static int mmio_vgic_init(void)
 {
+	if (!use_vgic)
+		return -1;
+
 	vgic_init();
 	return 0;
 }
@@ -76,23 +60,23 @@ static void mmio_vgic_test(void)
 
 static int ipi_init(void)
 {
-	vgic_init();
-	//unsigned counter = 1U << 28;
+	unsigned counter = 1U << 28;
 
-	/* Give it a chance... */
-	while (!second_cpu_up) {
-		dsb();
-		dmb();
-		isb();
-		clean_cache(&second_cpu_up);
-	}
-
-	if (!second_cpu_up) {
-		printf("ipi_init: no secondary CPU\n");
+	if (!use_vgic || nr_cpus == 1)
 		return -1;
-	} else {
-		printf("ipi_init: secondary CPU is up!\n");
-	}
+
+	vgic_init();
+
+	printf("core[0]: first cpu up\n");
+
+	while (!second_cpu_up && counter--);
+
+	if (!second_cpu_up)
+		return -1;
+
+	printf("core[0]: second cpu up\n");
+
+	first_cpu_ack = true;
 
 	return 0;
 }
@@ -160,19 +144,16 @@ static struct exit_test available_tests[] = {
 	{ "noop_guest",		noop_guest,		NULL		},
 };
 
-int test(void)
+int test(int smp_cpus, int vgic_enabled)
 {
 	unsigned int i;
 	struct exit_test *test;
 	int ret;
 
-	ipi_init();
-	ipi_test();
+	nr_cpus = smp_cpus;
+	use_vgic = vgic_enabled;
 
-	while (1);
-
-
-	return 0;
+	printf("getting here on first core...\n");
 
 	for (i = 0; i < ARR_SIZE(available_tests); i++) {
 		test = &available_tests[i];

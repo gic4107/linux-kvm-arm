@@ -4,7 +4,7 @@
 #include "guest.h"
 #include "io_common.h"
 
-int test(void)
+int test(int smp_cpus, int vgic_enabled)
 {
 	int ioaddr, val;
 

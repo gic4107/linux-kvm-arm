@@ -15,6 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +45,7 @@
 #define MAX_VCPUS	2
 
 static int nr_cpus = 1;
+static bool use_vgic = false;
 static int sys_fd;
 static int vm_fd;
 static int nr_cpus;
@@ -201,6 +204,8 @@ static void init_vcpu(unsigned long start)
 	struct kvm_one_reg reg;
 	__u32 lr = CODE_PHYS_BASE + RAM_SIZE;
 	__u64 core_id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_CORE;
+	__u32 smp = nr_cpus;
+	__u32 vgic_enabled = use_vgic;
 
 	for (i = 0; i < nr_cpus; i++) {
 		int fd = vcpu_fd[i];
@@ -214,6 +219,16 @@ static void init_vcpu(unsigned long start)
 		reg.addr = (long)&lr;
 		if (ioctl(fd, KVM_SET_ONE_REG, &reg) != 0)
 			err(EXIT_SETUPFAIL, "error setting LR");
+
+		reg.id = core_id | KVM_REG_ARM_CORE_REG(usr_regs.ARM_r0);
+		reg.addr = (long)&smp;
+		if (ioctl(fd, KVM_SET_ONE_REG, &reg) != 0)
+			err(EXIT_SETUPFAIL, "error setting r0");
+
+		reg.id = core_id | KVM_REG_ARM_CORE_REG(usr_regs.ARM_r1);
+		reg.addr = (long)&vgic_enabled;
+		if (ioctl(fd, KVM_SET_ONE_REG, &reg) != 0)
+			err(EXIT_SETUPFAIL, "error setting r1");
 	}
 }
 
@@ -301,19 +316,41 @@ struct cpu_exec_args {
 	int vcpu_id;
 };
 
+void set_cpu_affinity(int cpuid)
+{
+	int s, i;
+	cpu_set_t cpuset;
+	pthread_t thread;
+
+	thread = pthread_self();
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(cpuid, &cpuset);
+	s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+	if (s != 0)
+		err(EXIT_SETUPFAIL, "Error setting affinity");
+
+	s = pthread_getaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+	if (s != 0)
+		err(EXIT_SETUPFAIL, "Can't get affinity?");
+
+	printf("cpu[%d]: affinity: ");
+	for (i = 0; i < 4; i++) {
+		if (CPU_ISSET(i, &cpuset))
+			printf("cpu%d, ", i);
+	}
+	printf("\n");
+}
+
 static void *kvm_cpu_exec(void *opaque)
 {
 	struct cpu_exec_args *args = (struct cpu_exec_args *)opaque;
 	int id = args->vcpu_id;
 
+	//set_cpu_affinity(id);
+
 	do {
 		int ret = ioctl(vcpu_fd[id], KVM_RUN, 0);
-
-#if 0
-		if (id == 1) {
-			printf("cpu1 returned from run!\n");
-		}
-#endif
 
 		if (ret != -EINTR && ret != -EAGAIN && ret < 0) {
 			fprintf(stderr, "err at 0x%08lx\n", vcpu_get_pc(id));
@@ -348,7 +385,6 @@ int main(int argc, char * const *argv)
 	bool (*test)(struct kvm_run *kvm_run, int vcpu_fd);
 	unsigned long start;
 	int opt;
-	bool use_vgic = false;
 	char *test_name;
 	int ret, i;
 
@@ -397,6 +433,7 @@ int main(int argc, char * const *argv)
 
 	for (i = 0; i < nr_cpus; i++) {
 		struct cpu_exec_args *a;
+
 		a = malloc(sizeof(struct cpu_exec_args));
 		if (!a)
 			errx(EXIT_SETUPFAIL, "Out of address space?!?");

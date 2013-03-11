@@ -409,7 +409,7 @@ static struct test32 test32_table[] = {
 
 };
 
-int test(void)
+int test(int smp_cpus, int vgic_enabled)
 {
 	const struct test32 *i, *end;
 	unsigned int opc1, crn, crm, opc2;

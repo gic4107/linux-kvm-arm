@@ -3,7 +3,7 @@
 
 static char *io_data = IO_DATA;
 
-int test(void)
+int test(int smp_cpus, int vgic_enabled)
 {
 	register int r1 asm("r1");
 	register int r2 asm("r2");

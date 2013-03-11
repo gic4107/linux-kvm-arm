@@ -27,16 +27,24 @@ secondary_start:
 	@ Set up stack
 	ldr	sp, =stacktop_secondary
 
-	@ Enable the GIC CPU interface
-	bl	smp_gic_enable
+	@ Enable the MMU
+	mov	r0, #1
+	bl	enable_mmu
 
 	@ Tell the system we have two CPUs
+	mov	r0, r9
+	mov	r1, r10
 	bl	smp_init
+
+	@ Enable the GIC CPU interface
+	mov	r0, r9
+	mov	r1, r10
+	bl	smp_gic_enable
 
 	@ Enter pen
 	cpsie	i	@ Enable Interrupts
 1:	wfi
-	@bl	smp_test
+	bl	smp_test
 	b	1b
 
 .ltorg
