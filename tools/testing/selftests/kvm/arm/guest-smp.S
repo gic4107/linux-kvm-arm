@@ -31,9 +31,7 @@ secondary_start:
 	mov	r0, #1
 	bl	enable_mmu
 
-	@ Tell the system we have two CPUs
-	mov	r0, r9
-	mov	r1, r10
+	@ Tell the system we're up
 	bl	smp_init
 
 	@ Enable the GIC CPU interface
