@@ -40,8 +40,9 @@ secondary_start:
 	bl	smp_gic_enable
 
 	@ Enter pen
-	cpsie	i	@ Enable Interrupts
-1:	wfi
+1:	cpsie	i	@ Enable Interrupts
+	wfi
+	mov	r0, #1
 	bl	smp_test
 	b	1b
 

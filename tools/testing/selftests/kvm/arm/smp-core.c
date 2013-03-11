@@ -12,9 +12,9 @@ void smp_init(void)
 	second_cpu_up = true;
 }
 
-void smp_test(void)
+void smp_test(int cpu)
 {
-	printf(".");
+	debug("core[%u] smp irq\n", cpu);
 }
 
 void smp_interrupt(void)
