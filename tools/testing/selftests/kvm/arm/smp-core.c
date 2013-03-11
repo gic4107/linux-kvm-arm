@@ -38,9 +38,9 @@ void smp_gic_enable(int smp_cpus, int vgic_enabled)
 	dmb();
 	isb();
 
-	printf("core[1]: gic ready\n");
+	debug("core[1]: gic ready\n");
 
 	while (!first_cpu_ack);
 
-	printf("core[1]: first cpu acked\n");
+	debug("core[1]: first cpu acked\n");
 }
