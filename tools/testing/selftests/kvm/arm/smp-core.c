@@ -56,9 +56,7 @@ void smp_gic_enable(int smp_cpus, int vgic_enabled)
 		return;
 
 	writel(VGIC_CPU_BASE + GICC_CTLR, 0x1); /* enable cpu interface */
-
-	writel(VGIC_CPU_BASE + GICC_PMR, 0xff);		/* unmask irq 0 */
-	writel(VGIC_CPU_BASE + GICC_PMR, 0xff << 8);	/* unmask irq 1 */
+	writel(VGIC_CPU_BASE + GICC_PMR, 0xff);	/* unmask all irq priorities */
 
 	dsb();
 	dmb();

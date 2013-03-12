@@ -42,6 +42,18 @@ start:
 primary:
 	@ Set up stack
 	ldr	sp, =stacktop
+
+	@ Get a few words on the IRQ stack
+	mov	r0, sp
+	mrs	r1, cpsr
+	bic	r1, r1, #0x1f
+	orr	r1, r1, #0x12
+	msr	cpsr_cxsf, r1	@ Go to IRQ mode
+	mov	sp, r0
+	orr	r1, r1, #0x13
+	msr	cpsr_cxsf, r1	@ Go back to SVC mode
+	sub	sp, sp, #16
+
 	mov	r0, #0
 	bl	enable_mmu
 	mov	r0, r9
@@ -73,11 +85,11 @@ putc:
 	strb	r0, [r1]
 	mov	pc, lr
 
-.macro	svc_stub
-	mrs	sp, cpsr
-	bic	sp, sp, #0x1f
-	orr	sp, sp, #0x13
-	msr	cpsr_cxsf, sp
+.macro	svc_stub tmp
+	mrs	\tmp, cpsr
+	bic	\tmp, \tmp, #0x1f
+	orr	\tmp, \tmp, #0x13
+	msr	cpsr_cxsf, \tmp
 	isb
 .endm
 
@@ -104,7 +116,7 @@ prefetch_abort:
 	and	r0, r0, #3
 	mrc	p15, 0, r1, c6, c0, 2
 	mov	r2, lr
-	svc_stub /* re-establish stack */
+	svc_stub sp /* re-establish stack */
 	bl	guest_abort_exception
 	ldr	r0, =prefetch_msg
 	b	abort
@@ -114,12 +126,13 @@ data_abort:
 	and	r0, r0, #3
 	mrc	p15, 0, r1, c6, c0, 2
 	mov	r2, lr
-	svc_stub /* re-establish stack */
+	svc_stub sp /* re-establish stack */
 	bl	guest_abort_exception
 	ldr	r0, =data_msg
 	b	abort
 
-irq:	mrc	p15, 0, r0, c0, c0, 5
+irq:	push	{r0, r1, lr}
+	mrc	p15, 0, r0, c0, c0, 5
 	and	r0, r0, #3
 	cmp	r0, #0
 
@@ -128,8 +141,10 @@ irq:	mrc	p15, 0, r0, c0, c0, 5
 	beq	abort
 
 	# Seconday CPUs should perform an exception return (with IRQ disabled)
-	ldreq	r0, =irq2_msg
-	beq	abort
+	mov	r0, sp
+	add	sp, #12
+	svc_stub r1
+	ldmia	r0, {r0, r1, pc}
 
 fiq:
 	ldr	r0, =fiq_msg

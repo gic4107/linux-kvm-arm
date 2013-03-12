@@ -27,6 +27,17 @@ secondary_start:
 	@ Set up stack
 	ldr	sp, =secondary_stacktop
 
+	@ Get a few words on the IRQ stack
+	mov	r0, sp
+	mrs	r1, cpsr
+	bic	r1, r1, #0x1f
+	orr	r1, r1, #0x12
+	msr	cpsr_cxsf, r1	@ Go to IRQ mode
+	mov	sp, r0
+	orr	r1, r1, #0x13
+	msr	cpsr_cxsf, r1	@ Go back to SVC mode
+	sub	sp, sp, #16
+
 	@ Enable the MMU
 	mov	r0, #1
 	bl	enable_mmu

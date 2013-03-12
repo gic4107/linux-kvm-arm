@@ -141,9 +141,7 @@ static struct exit_test available_tests[] = {
 	{ "hvc",		hvc_test,		NULL		},
 	{ "vgic_mmio",		mmio_vgic_test,		mmio_vgic_init	},
 	{ "fake_mmio",		mmio_fake_test,		NULL		},
-#if 0
 	{ "ipi",		ipi_test,		ipi_init	},
-#endif
 };
 
 int test(int smp_cpus, int vgic_enabled)
