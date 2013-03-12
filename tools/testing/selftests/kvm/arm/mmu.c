@@ -111,6 +111,7 @@ void enable_mmu(int cpu)
 			/* HACK !!! */
 			pgd[i] |= (1 << 2); /* MAIR0 attr1 */
 		}
+		clean_cache(&pgd[i]);
 	}
 	dsb();
 	dmb();
@@ -130,8 +131,6 @@ void enable_mmu(int cpu)
 	pgd_ptr = (unsigned long)pgd;
 	ttbr0 = (unsigned long long)pgd_ptr & (~(0x1fULL));
 	set_ttbr0(ttbr0);
-
-	while (get_cpuid() == 0);
 
 	sctlr = get_sctlr();
 	sctlr |= SCTLR_M | SCTLR_C | SCTLR_I;
