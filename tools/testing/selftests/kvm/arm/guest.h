@@ -71,6 +71,7 @@ int test(int smp_cpus, int vgic_enabled);
 /* Secondary CPUs write to this value */
 extern volatile bool second_cpu_up;
 extern volatile bool first_cpu_ack;
+extern volatile bool ipi_ack;
 
 static inline void dmb(void)
 {

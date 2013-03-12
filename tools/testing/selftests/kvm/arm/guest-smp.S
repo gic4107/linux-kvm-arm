@@ -51,10 +51,10 @@ secondary_start:
 	bl	smp_gic_enable
 
 	@ Enter pen
-1:	cpsie	i	@ Enable Interrupts
-	wfi
-	mov	r0, #1
-	bl	smp_test
+	cpsie	i	@ Enable Interrupts
+1:	wfi
+	b	1b
+	bl	smp_interrupt
 	b	1b
 
 .ltorg

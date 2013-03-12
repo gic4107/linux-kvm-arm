@@ -1,4 +1,4 @@
-#define DEBUG 1
+//#define DEBUG 1
 
 #include "guest.h"
 #include "guest-util.h"
@@ -88,13 +88,17 @@ static void ipi_test(void)
 {
 	unsigned long val;
 
+	ipi_ack = false;
+
 	/* Signal IPI/SGI IRQ to CPU 1 */
 	val = SGIR_FORMAT(1, sgi_irq);
 
 	writel(vgic_base + GICD_SGIR, val);
-	dsb();
-	dmb();
-	isb();
+	//dsb();
+	//dmb();
+	//isb();
+
+	while (!ipi_ack);
 }
 
 static void mmio_fake_test(void)
@@ -137,7 +141,7 @@ static void loop_test(struct exit_test *test)
 }
 
 static struct exit_test available_tests[] = {
-	{ "noop_guest",		noop_guest,		NULL		},
+	//{ "noop_guest",		noop_guest,		NULL		},
 	{ "hvc",		hvc_test,		NULL		},
 	{ "vgic_mmio",		mmio_vgic_test,		mmio_vgic_init	},
 	{ "fake_mmio",		mmio_fake_test,		NULL		},

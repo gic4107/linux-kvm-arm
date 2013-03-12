@@ -1,4 +1,4 @@
-#define DEBUG 1
+//#define DEBUG 1
 
 #include "guest.h"
 #include "vmexit.h"
@@ -8,6 +8,7 @@ __asm__(".arch_extension	virt");
 
 volatile bool second_cpu_up;
 volatile bool first_cpu_ack;
+volatile bool ipi_ack;
 
 void smp_init(void)
 {
@@ -34,7 +35,7 @@ void smp_interrupt(void)
 
 	if (irq <= 15) {
 		/* SGI */
-		assert(cpu == 0);
+		//assert(cpu == 0);
 	} else {
 		printf("unknown IRQID: %u\n", irq);
 		fail();
@@ -45,6 +46,7 @@ void smp_interrupt(void)
 	writel(VGIC_CPU_BASE + GICC_EOIR, eoi);
 	dsb();
 	dmb();
+
 
 }
 
