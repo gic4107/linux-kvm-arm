@@ -7,7 +7,7 @@
 
 __asm__(".arch_extension	virt");
 
-#define GOAL (1ULL << 26)
+#define GOAL (1ULL << 28)
 
 #define ARR_SIZE(_x) ((sizeof(_x) / sizeof(_x[0])))
 
@@ -120,19 +120,34 @@ static void loop_test(struct exit_test *test)
 {
 	unsigned long i, iterations = 32;
 	unsigned long c2, c1, cycles = 0;
+	bool ipi = false;
+
+	/* hack! no strcmp */
+	if (test->name[0] == 'i' &&
+	    test->name[1] == 'p' &&
+	    test->name[2] == 'i' &&
+	    test->name[3] == '\0') {
+		ipi = true;
+	}
 
 	do {
 		iterations *= 2;
+
+		/* wait for ipi to be ready */
+		while (ipi && !ipi_ready);
 
 		c1 = read_cc();
 		for (i = 0; i < iterations; i++)
 			test->test_fn();
 		c2 = read_cc();
 
+		ipi_ready = false;
+
 		if (c1 >= c2)
 			continue;
 		cycles = c2 - c1;
 	} while (cycles < GOAL);
+	ipi_ready = true;
 
 	debug("%s exit %u cycles over %u iterations = %u\n",
 	       test->name, cycles, iterations, cycles / iterations);
@@ -141,7 +156,7 @@ static void loop_test(struct exit_test *test)
 }
 
 static struct exit_test available_tests[] = {
-	//{ "noop_guest",		noop_guest,		NULL		},
+	{ "noop_guest",		noop_guest,		NULL		},
 	{ "hvc",		hvc_test,		NULL		},
 	{ "vgic_mmio",		mmio_vgic_test,		mmio_vgic_init	},
 	{ "fake_mmio",		mmio_fake_test,		NULL		},

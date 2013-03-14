@@ -30,9 +30,9 @@ CFLAGS = -I$(KDIR)/include/uapi \
 	 -I$(KDIR)/include \
 	 -I$(KDIR)/arch/arm/include/uapi \
 	 -I$(KDIR)/arch/arm/include \
-	 -Wall -D__EXPORTED_HEADERS__ -marm
+	 -Wall -D__EXPORTED_HEADERS__ -marm -mcpu=cortex-a15
 
-TESTS=mmio vfp cond cp15 helloworld vmexit
+TESTS=mmio cond cp15 helloworld vmexit
 
 GUESTS=$(TESTS:%=%-guest)
 HOST_DRIVERS=$(TESTS:%=%-host.o)

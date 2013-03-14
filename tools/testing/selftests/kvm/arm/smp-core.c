@@ -9,6 +9,8 @@ __asm__(".arch_extension	virt");
 volatile bool second_cpu_up;
 volatile bool first_cpu_ack;
 volatile bool ipi_ack;
+volatile bool ipi_ready;
+
 
 void smp_init(void)
 {
@@ -24,6 +26,8 @@ void smp_interrupt(void)
 {
 	unsigned long ack, eoi;
 	int irq, cpu;
+
+	ipi_ack = true;
 
 	debug("core[1]: received interrupt\n");
 
@@ -47,7 +51,7 @@ void smp_interrupt(void)
 	dsb();
 	dmb();
 
-
+	ipi_ready = true;
 }
 
 void smp_gic_enable(int smp_cpus, int vgic_enabled)
@@ -69,4 +73,5 @@ void smp_gic_enable(int smp_cpus, int vgic_enabled)
 	while (!first_cpu_ack);
 
 	debug("core[1]: first cpu acked\n");
+	ipi_ready = true;
 }

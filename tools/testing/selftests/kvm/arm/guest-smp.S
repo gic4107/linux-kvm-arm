@@ -27,7 +27,7 @@ secondary_start:
 	@ Set up stack
 	ldr	sp, =secondary_stacktop
 
-	@ Get a few words on the IRQ stack
+	@ Get a stack page for IRQ mode
 	mov	r0, sp
 	mrs	r1, cpsr
 	bic	r1, r1, #0x1f
@@ -36,7 +36,7 @@ secondary_start:
 	mov	sp, r0
 	orr	r1, r1, #0x13
 	msr	cpsr_cxsf, r1	@ Go back to SVC mode
-	sub	sp, sp, #16
+	sub	sp, sp, #4096
 
 	@ Enable the MMU
 	mov	r0, #1
@@ -53,8 +53,6 @@ secondary_start:
 	@ Enter pen
 	cpsie	i	@ Enable Interrupts
 1:	wfi
-	b	1b
-	bl	smp_interrupt
 	b	1b
 
 .ltorg
