@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
-#define DEBUG 1
+//#define DEBUG 1
 
 #include <linux/cpu.h>
 #include <linux/kvm.h>
@@ -712,13 +712,8 @@ bool vgic_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	if (!irqchip_in_kernel(vcpu->kvm) ||
 	    mmio->phys_addr < base ||
 	    (mmio->phys_addr + mmio->len) > (base + KVM_VGIC_V2_DIST_SIZE)) {
-		kvm_info("no vgic mmio: 0x%llx\n", (unsigned long long)mmio->phys_addr);
-		kvm_info("vgic dist mmio range: 0x%lx - 0x%lx\n",
-			 base, base + KVM_VGIC_V2_DIST_SIZE);
 		return false;
 	}
-
-	kvm_info("got vgic mmio: 0x%llx\n", (unsigned long long)mmio->phys_addr);
 
 	/* We don't support ldrd / strd or ldm / stm to the emulated vgic */
 	if (mmio->len > 4) {
