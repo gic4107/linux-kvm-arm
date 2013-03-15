@@ -94,7 +94,6 @@ ENTRY(__kvm_vcpu_run)
 
 	save_host_regs
 
-	restore_vgic_state
 	restore_timer_state
 
 	@ Store hardware CP15 state and load guest state
@@ -191,7 +190,6 @@ after_vfp_restore:
 	write_cp15_state read_from_vcpu = 0
 
 	save_timer_state
-	save_vgic_state
 
 	restore_host_regs
 	clrex				@ Clear exclusive monitor
