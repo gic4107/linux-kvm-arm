@@ -963,7 +963,7 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	int i, vcpu_id;
+	int i, lr, vcpu_id;
 	int overflow = 0;
 
 	vcpu_id = vcpu->vcpu_id;
@@ -1009,6 +1009,18 @@ epilog:
 		 */
 		clear_bit(vcpu_id, &dist->irq_pending_on_cpu);
 	}
+
+	/* Now write the state to the hardware */
+	writel(vgic_cpu->vgic_vmcr, vgic_vctrl_base + GICH_VMCR);
+	writel(vgic_cpu->vgic_apr, vgic_vctrl_base + GICH_APR);
+
+	for_each_set_bit(lr, vgic_cpu->lr_used, vgic_cpu->nr_lr) {
+		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
+		writel(vgic_cpu->vgic_lr[lr], lr0 + (4 * lr));
+	}
+
+	/* It's safe to enable the VGIC, because interrupts are disabled */
+	writel(vgic_cpu->vgic_hcr, vgic_vctrl_base + GICH_HCR);
 }
 
 static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
@@ -1042,6 +1054,7 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 
 		for_each_set_bit(lr, (unsigned long *)vgic_cpu->vgic_eisr,
 				 vgic_cpu->nr_lr) {
+			BUG_ON(!test_bit(lr, vgic_cpu->lr_used));
 			irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
 
 			vgic_irq_clear_active(vcpu, irq);
@@ -1075,6 +1088,25 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	int lr, pending;
 	bool level_pending;
 
+	/* First read the state from the hardware */
+	vgic_cpu->vgic_vmcr = readl(vgic_vctrl_base + GICH_VMCR);
+	vgic_cpu->vgic_misr = readl(vgic_vctrl_base + GICH_MISR);
+	vgic_cpu->vgic_eisr[0] = readl(vgic_vctrl_base + GICH_EISR0);
+	vgic_cpu->vgic_eisr[1] = readl(vgic_vctrl_base + GICH_EISR1);
+	vgic_cpu->vgic_elrsr[0] = readl(vgic_vctrl_base + GICH_ELRSR0);
+	vgic_cpu->vgic_elrsr[1] = readl(vgic_vctrl_base + GICH_ELRSR1);
+	vgic_cpu->vgic_apr = readl(vgic_vctrl_base + GICH_APR);
+
+	for_each_set_bit(lr, vgic_cpu->lr_used, vgic_cpu->nr_lr) {
+		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
+		vgic_cpu->vgic_lr[lr] = readl(lr0 + (4 * lr));
+		writel(0, lr0 + (4 * lr));
+	}
+
+	/* Disable the VGIC */
+	writel(0, vgic_vctrl_base + GICH_HCR);
+
+	/* Now handle the software side of things */
 	level_pending = vgic_process_maintenance(vcpu);
 
 	/* Clear mappings for empty LRs */
@@ -1283,6 +1315,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	vgic_cpu->vgic_vmcr = 0;
 
 	vgic_cpu->nr_lr = vgic_nr_lr;
+
 	vgic_cpu->vgic_hcr = GICH_HCR_EN; /* Get the show on the road... */
 
 	return 0;
@@ -1313,6 +1346,16 @@ static int vgic_cpu_notify(struct notifier_block *self,
 static struct notifier_block vgic_cpu_nb = {
 	.notifier_call = vgic_cpu_notify,
 };
+
+static void vgic_init_lrs(void *info)
+{
+	int lr;
+
+	for (lr = 0; lr < vgic_nr_lr; lr++) {
+		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
+		writel(0, lr0 + 4 * lr);
+	}
+}
 
 int kvm_vgic_hyp_init(void)
 {
@@ -1380,6 +1423,11 @@ int kvm_vgic_hyp_init(void)
 		goto out_unmap;
 	}
 	vgic_vcpu_base = vcpu_res.start;
+
+	/*
+	 * Init all vgic registers by clearing their content
+	 */
+	on_each_cpu(vgic_init_lrs, NULL, 1);
 
 	goto out;
 
