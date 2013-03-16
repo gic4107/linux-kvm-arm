@@ -103,6 +103,11 @@ static int __init exynos_sata_probe(struct platform_device *pdev)
 	}
 
 	exynos_sata_parse_dt(dev->of_node, sata);
+	if (!sata->freq) {
+		dev_err(dev, "can't determine sata frequency \n");
+		ret = -ENOMEM;
+		goto err2;
+	}
 
 	sata->sclk = devm_clk_get(dev, "sclk_sata");
 	if (IS_ERR(sata->sclk)) {
