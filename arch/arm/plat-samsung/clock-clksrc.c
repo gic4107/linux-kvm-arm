@@ -58,6 +58,8 @@ static int s3c_setrate_clksrc(struct clk *clk, unsigned long rate)
 	u32 mask = bit_mask(sclk->reg_div.shift, sclk->reg_div.size);
 	u32 val;
 
+	BUG_ON(!rate);
+
 	rate = clk_round_rate(clk, rate);
 	div = clk_get_rate(clk->parent) / rate;
 	if (div > (1 << sclk->reg_div.size))
