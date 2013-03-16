@@ -273,9 +273,17 @@ MODULE_DEVICE_TABLE(of, sata_phy_of_match);
 
 static const struct i2c_device_id phy_i2c_device_match[] = {
 	{ "sata-phy", 0 },
+	{},
 };
 
 MODULE_DEVICE_TABLE(of, phy_i2c_device_match);
+
+static const struct of_device_id phy_i2c_driver_match[] = {
+	{ .compatible = "sata-phy", },
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, phy_i2c_driver_match);
 
 static struct platform_driver sata_phy_driver = {
 	.probe = sata_phy_probe,
@@ -291,7 +299,7 @@ static struct i2c_driver sataphy_i2c_driver = {
 	.driver = {
 		   .name = "sata-phy-i2c",
 		   .owner = THIS_MODULE,
-		   .of_match_table = phy_i2c_device_match,
+		   .of_match_table = phy_i2c_driver_match,
 	},
 	.probe = sata_i2c_probe,
 	.id_table = phy_i2c_device_match,
