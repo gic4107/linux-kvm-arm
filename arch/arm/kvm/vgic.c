@@ -275,12 +275,14 @@ static void vgic_set_lr_mapping(struct kvm_vcpu *vcpu, int irq, int lr)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	vgic_cpu->vgic_irq_lr_map[irq] = lr;
+	vgic_cpu->vgic_lr_irq_map[lr] = irq;
 }
 
-static void vgic_clear_lr_mapping(struct kvm_vcpu *vcpu, int irq)
+static void vgic_clear_lr_mapping(struct kvm_vcpu *vcpu, int irq, int lr)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	vgic_cpu->vgic_irq_lr_map[irq] = LR_EMPTY;
+	vgic_cpu->vgic_lr_irq_map[lr] = LR_EMPTY;
 }
 
 /**
@@ -888,7 +890,7 @@ static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu)
 		int irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
 
 		if (!vgic_irq_is_enabled(vcpu, irq)) {
-			vgic_clear_lr_mapping(vcpu, irq);
+			vgic_clear_lr_mapping(vcpu, irq, lr);
 			clear_bit(lr, vgic_cpu->lr_used);
 			vgic_cpu->vgic_lr[lr] &= ~GICH_LR_STATE;
 			if (vgic_irq_is_active(vcpu, irq))
@@ -1078,7 +1080,7 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 
 		for_each_set_bit(lr, (unsigned long *)vgic_cpu->vgic_eisr,
 				 vgic_cpu->nr_lr) {
-			irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
+			irq = vgic_cpu->vgic_lr_irq_map[lr];
 
 			vgic_irq_clear_active(vcpu, irq);
 			vgic_cpu->vgic_lr[lr] &= ~GICH_LR_EOI;
@@ -1137,10 +1139,10 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
 
-		irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
+		irq = vgic_cpu->vgic_lr_irq_map[lr];
 
 		BUG_ON(irq >= VGIC_NR_IRQS);
-		vgic_clear_lr_mapping(vcpu, irq);
+		vgic_clear_lr_mapping(vcpu, irq, lr);
 	}
 
 	/* Check if we still have something up our sleeve... */
@@ -1314,7 +1316,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	int i;
+	int i, lr;
 
 	if (!irqchip_in_kernel(vcpu->kvm))
 		return 0;
@@ -1332,6 +1334,9 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 
 		vgic_cpu->vgic_irq_lr_map[i] = LR_EMPTY;
 	}
+
+	for (lr = 0; lr < vgic_cpu->nr_lr; lr++)
+		vgic_cpu->vgic_lr_irq_map[lr] = LR_EMPTY;
 
 	/*
 	 * By forcing VMCR to zero, the GIC will restore the binary
