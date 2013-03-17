@@ -113,6 +113,9 @@ struct vgic_dist {
 
 struct vgic_cpu {
 #ifdef CONFIG_KVM_ARM_VGIC
+	/* Physical CPU currently using this virtual state */
+	int		cpuid;
+
 	/* per IRQ to LR mapping */
 	u8		vgic_irq_lr_map[VGIC_NR_IRQS];
 
@@ -137,7 +140,8 @@ struct vgic_cpu {
 #endif
 };
 
-#define LR_EMPTY	0xff
+#define VGIC_CPU_NOT_RUNNING	-1
+#define LR_EMPTY		0xff
 
 struct kvm;
 struct kvm_vcpu;

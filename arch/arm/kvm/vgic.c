@@ -1056,6 +1056,8 @@ epilog:
 
 	/* It's safe to enable the VGIC, because interrupts are disabled */
 	vgic_writel(vgic_cpu->vgic_hcr, GICH_HCR);
+
+	vgic_cpu->cpuid = smp_processor_id();
 }
 
 static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
@@ -1074,7 +1076,6 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 
 		for_each_set_bit(lr, (unsigned long *)vgic_cpu->vgic_eisr,
 				 vgic_cpu->nr_lr) {
-			BUG_ON(!test_bit(lr, vgic_cpu->lr_used));
 			irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
 			trace_kvm_vgic_eoi_maintenance(*vcpu_pc(vcpu), irq);
 
@@ -1148,6 +1149,8 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 				      vgic_cpu->nr_lr);
 	if (level_pending || pending < vgic_cpu->nr_lr)
 		set_bit(vcpu->vcpu_id, &dist->irq_pending_on_cpu);
+
+	vgic_cpu->cpuid = VGIC_CPU_NOT_RUNNING;
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
@@ -1341,6 +1344,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	vgic_cpu->nr_lr = vgic_nr_lr;
 
 	vgic_cpu->vgic_hcr = GICH_HCR_EN; /* Get the show on the road... */
+	vgic_cpu->cpuid = VGIC_CPU_NOT_RUNNING;
 
 	return 0;
 }
