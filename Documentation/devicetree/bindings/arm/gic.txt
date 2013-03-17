@@ -71,8 +71,10 @@ Required properties:
 
 - reg : Additional regions specifying the base physical address and
   size of the VGIC registers. The first additional region is the GIC
-  virtual interface control register base and size. The 2nd additional
-  region is the GIC virtual cpu interface register base and size.
+  common virtual interface control register base and size.
+  The 2nd additional region is the GIC cpu-specific virtual interface
+  control register base and size.  The 3rd additional region is the GIC
+  virtual cpu interface register base and size.
 
 - interrupts : VGIC maintenance interrupt.
 
@@ -83,8 +85,9 @@ Example:
 		#interrupt-cells = <3>;
 		interrupt-controller;
 		reg = <0x2c001000 0x1000>,
-		      <0x2c002000 0x1000>,
-		      <0x2c004000 0x2000>,
+		      <0x2c002000 0x2000>,
+		      <0x2c004000 0x1000>,
+		      <0x2c005000 0x1000>,
 		      <0x2c006000 0x2000>;
 		interrupts = <1 9 0xf04>;
 	};
