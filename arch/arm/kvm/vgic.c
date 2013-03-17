@@ -271,6 +271,18 @@ static void mmio_data_write(struct kvm_exit_mmio *mmio, u32 mask, u32 value)
 	*((u32 *)mmio->data) = value & mask;
 }
 
+static void vgic_set_lr_mapping(struct kvm_vcpu *vcpu, int irq, int lr)
+{
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	vgic_cpu->vgic_irq_lr_map[irq] = lr;
+}
+
+static void vgic_clear_lr_mapping(struct kvm_vcpu *vcpu, int irq)
+{
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	vgic_cpu->vgic_irq_lr_map[irq] = LR_EMPTY;
+}
+
 /**
  * vgic_reg_access - access vgic register
  * @mmio:   pointer to the data describing the mmio access
@@ -876,7 +888,7 @@ static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu)
 		int irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
 
 		if (!vgic_irq_is_enabled(vcpu, irq)) {
-			vgic_cpu->vgic_irq_lr_map[irq] = LR_EMPTY;
+			vgic_clear_lr_mapping(vcpu, irq);
 			clear_bit(lr, vgic_cpu->lr_used);
 			vgic_cpu->vgic_lr[lr] &= ~GICH_LR_STATE;
 			if (vgic_irq_is_active(vcpu, irq))
@@ -922,7 +934,7 @@ static bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 
 	kvm_debug("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
 	vgic_cpu->vgic_lr[lr] = MK_LR_PEND(sgi_source_id, irq);
-	vgic_cpu->vgic_irq_lr_map[irq] = lr;
+	vgic_set_lr_mapping(vcpu, irq, lr);
 	set_bit(lr, vgic_cpu->lr_used);
 
 out:
@@ -1096,7 +1108,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	int lr, pending;
+	int irq, lr, pending;
 	bool level_pending;
 
 	/* First read the state from the hardware */
@@ -1122,15 +1134,13 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	/* Clear mappings for empty LRs */
 	for_each_set_bit(lr, (unsigned long *)vgic_cpu->vgic_elrsr,
 			 vgic_cpu->nr_lr) {
-		int irq;
-
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
 
 		irq = vgic_cpu->vgic_lr[lr] & GICH_LR_VIRTUALID;
 
 		BUG_ON(irq >= VGIC_NR_IRQS);
-		vgic_cpu->vgic_irq_lr_map[irq] = LR_EMPTY;
+		vgic_clear_lr_mapping(vcpu, irq);
 	}
 
 	/* Check if we still have something up our sleeve... */
