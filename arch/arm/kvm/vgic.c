@@ -76,6 +76,7 @@ static phys_addr_t vgic_vcpu_base;
 
 /* Virtual control interface base address */
 static void __iomem *vgic_vctrl_base;
+static void __iomem *vgic_cpu_vctrl_base;
 
 static struct device_node *vgic_node;
 
@@ -95,6 +96,32 @@ static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg);
 static u32 vgic_nr_lr;
 
 static unsigned int vgic_maint_irq;
+
+static void vgic_writel_cpu(int cpu, u32 value, u32 offset)
+{
+	void __iomem *cpu_base;
+	/* TODO: Make the address below generic outside Cortex-A15 */
+	cpu_base = vgic_cpu_vctrl_base + ((cpu & 0x3UL) << 9);
+	writel(value, cpu_base + offset);
+}
+
+static u32 vgic_readl_cpu(int cpu, u32 offset)
+{
+	void __iomem *cpu_base;
+	/* TODO: Make the address below generic outside Cortex-A15 */
+	cpu_base = vgic_cpu_vctrl_base + ((cpu & 0x3UL) << 9);
+	return readl(cpu_base + offset);
+}
+
+static void vgic_writel(u32 value, u32 offset)
+{
+	vgic_writel_cpu(smp_processor_id(), value, offset);
+}
+
+static u32 vgic_readl(u32 offset)
+{
+	return vgic_readl_cpu(smp_processor_id(), offset);
+}
 
 static u32 *vgic_bitmap_get_reg(struct vgic_bitmap *x,
 				int cpuid, u32 offset)
@@ -1011,16 +1038,14 @@ epilog:
 	}
 
 	/* Now write the state to the hardware */
-	writel(vgic_cpu->vgic_vmcr, vgic_vctrl_base + GICH_VMCR);
-	writel(vgic_cpu->vgic_apr, vgic_vctrl_base + GICH_APR);
+	vgic_writel(vgic_cpu->vgic_vmcr, GICH_VMCR);
+	vgic_writel(vgic_cpu->vgic_apr, GICH_APR);
 
-	for_each_set_bit(lr, vgic_cpu->lr_used, vgic_cpu->nr_lr) {
-		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
-		writel(vgic_cpu->vgic_lr[lr], lr0 + (4 * lr));
-	}
+	for_each_set_bit(lr, vgic_cpu->lr_used, vgic_cpu->nr_lr)
+		vgic_writel(vgic_cpu->vgic_lr[lr], GICH_LR0 + (4 * lr));
 
 	/* It's safe to enable the VGIC, because interrupts are disabled */
-	writel(vgic_cpu->vgic_hcr, vgic_vctrl_base + GICH_HCR);
+	vgic_writel(vgic_cpu->vgic_hcr, GICH_HCR);
 }
 
 static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
@@ -1089,22 +1114,21 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	bool level_pending;
 
 	/* First read the state from the hardware */
-	vgic_cpu->vgic_vmcr = readl(vgic_vctrl_base + GICH_VMCR);
-	vgic_cpu->vgic_misr = readl(vgic_vctrl_base + GICH_MISR);
-	vgic_cpu->vgic_eisr[0] = readl(vgic_vctrl_base + GICH_EISR0);
-	vgic_cpu->vgic_eisr[1] = readl(vgic_vctrl_base + GICH_EISR1);
-	vgic_cpu->vgic_elrsr[0] = readl(vgic_vctrl_base + GICH_ELRSR0);
-	vgic_cpu->vgic_elrsr[1] = readl(vgic_vctrl_base + GICH_ELRSR1);
-	vgic_cpu->vgic_apr = readl(vgic_vctrl_base + GICH_APR);
+	vgic_cpu->vgic_vmcr = vgic_readl(GICH_VMCR);
+	vgic_cpu->vgic_misr = vgic_readl(GICH_MISR);
+	vgic_cpu->vgic_eisr[0] = vgic_readl(GICH_EISR0);
+	vgic_cpu->vgic_eisr[1] = vgic_readl(GICH_EISR1);
+	vgic_cpu->vgic_elrsr[0] = vgic_readl(GICH_ELRSR0);
+	vgic_cpu->vgic_elrsr[1] = vgic_readl(GICH_ELRSR1);
+	vgic_cpu->vgic_apr = vgic_readl(GICH_APR);
 
 	for_each_set_bit(lr, vgic_cpu->lr_used, vgic_cpu->nr_lr) {
-		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
-		vgic_cpu->vgic_lr[lr] = readl(lr0 + (4 * lr));
-		writel(0, lr0 + (4 * lr));
+		vgic_cpu->vgic_lr[lr] = vgic_readl(GICH_LR0 + (4 * lr));
+		vgic_writel(0, GICH_LR0 + (4 * lr));
 	}
 
 	/* Disable the VGIC */
-	writel(0, vgic_vctrl_base + GICH_HCR);
+	vgic_writel(0, GICH_HCR);
 
 	/* Now handle the software side of things */
 	level_pending = vgic_process_maintenance(vcpu);
@@ -1347,21 +1371,13 @@ static struct notifier_block vgic_cpu_nb = {
 	.notifier_call = vgic_cpu_notify,
 };
 
-static void vgic_init_lrs(void *info)
-{
-	int lr;
-
-	for (lr = 0; lr < vgic_nr_lr; lr++) {
-		void __iomem *lr0 = vgic_vctrl_base + GICH_LR0;
-		writel(0, lr0 + 4 * lr);
-	}
-}
-
 int kvm_vgic_hyp_init(void)
 {
 	int ret;
 	struct resource vctrl_res;
 	struct resource vcpu_res;
+	void __iomem *end;
+	int cpu, lr;
 
 	vgic_node = of_find_compatible_node(NULL, NULL, "arm,cortex-a15-gic");
 	if (!vgic_node) {
@@ -1389,6 +1405,9 @@ int kvm_vgic_hyp_init(void)
 		goto out_free_irq;
 	}
 
+	/*
+	 * Map in common cpu VCTRL interface
+	 */
 	ret = of_address_to_resource(vgic_node, 2, &vctrl_res);
 	if (ret) {
 		kvm_err("Cannot obtain VCTRL resource\n");
@@ -1396,28 +1415,51 @@ int kvm_vgic_hyp_init(void)
 	}
 
 	vgic_vctrl_base = of_iomap(vgic_node, 2);
+	end = vgic_vctrl_base + resource_size(&vctrl_res);
 	if (!vgic_vctrl_base) {
 		kvm_err("Cannot ioremap VCTRL\n");
 		ret = -ENOMEM;
 		goto out_free_irq;
 	}
 
-	vgic_nr_lr = readl_relaxed(vgic_vctrl_base + GICH_VTR);
-	vgic_nr_lr = (vgic_nr_lr & 0x3f) + 1;
-
-	ret = create_hyp_io_mappings(vgic_vctrl_base,
-				     vgic_vctrl_base + resource_size(&vctrl_res),
-				     vctrl_res.start);
+	ret = create_hyp_io_mappings(vgic_vctrl_base, end, vctrl_res.start);
 	if (ret) {
 		kvm_err("Cannot map VCTRL into hyp\n");
 		goto out_unmap;
 	}
 
+	vgic_nr_lr = readl_relaxed(vgic_vctrl_base + GICH_VTR);
+	vgic_nr_lr = (vgic_nr_lr & 0x3f) + 1;
+
 	kvm_info("%s@%llx IRQ%d\n", vgic_node->name,
 		 vctrl_res.start, vgic_maint_irq);
 	on_each_cpu(vgic_init_maintenance_interrupt, NULL, 1);
 
-	if (of_address_to_resource(vgic_node, 3, &vcpu_res)) {
+
+	/*
+	 * Map in cpu-specific cpu VCTRL interface
+	 */
+	ret = of_address_to_resource(vgic_node, 3, &vctrl_res);
+	if (ret) {
+		kvm_err("Cannot obtain cpu-specific VCTRL resource\n");
+		goto out_free_irq;
+	}
+
+	vgic_cpu_vctrl_base = of_iomap(vgic_node, 3);
+	end = vgic_cpu_vctrl_base + resource_size(&vctrl_res);
+	if (!vgic_cpu_vctrl_base) {
+		kvm_err("Cannot ioremap cpu-specific VCTRL\n");
+		ret = -ENOMEM;
+		goto out_free_irq;
+	}
+
+	ret = create_hyp_io_mappings(vgic_cpu_vctrl_base, end, vctrl_res.start);
+	if (ret) {
+		kvm_err("Cannot map cpu-specific VCTRL into hyp\n");
+		goto out_unmap;
+	}
+
+	if (of_address_to_resource(vgic_node, 4, &vcpu_res)) {
 		kvm_err("Cannot obtain VCPU resource\n");
 		ret = -ENXIO;
 		goto out_unmap;
@@ -1427,7 +1469,10 @@ int kvm_vgic_hyp_init(void)
 	/*
 	 * Init all vgic registers by clearing their content
 	 */
-	on_each_cpu(vgic_init_lrs, NULL, 1);
+	for_each_possible_cpu(cpu) {
+		for (lr = 0; lr < vgic_nr_lr; lr++)
+			vgic_writel_cpu(cpu, 0, GICH_LR0 + 4 * lr);
+	}
 
 	goto out;
 
