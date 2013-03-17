@@ -116,8 +116,9 @@ struct vgic_cpu {
 	/* Physical CPU currently using this virtual state */
 	int		cpuid;
 
-	/* per IRQ to LR mapping */
+	/* per IRQ to LR mapping and vice versa */
 	u8		vgic_irq_lr_map[VGIC_NR_IRQS];
+	u8		vgic_lr_irq_map[VGIC_MAX_LRS];
 
 	/* Pending interrupts on this VCPU */
 	DECLARE_BITMAP(	pending_percpu, VGIC_NR_PRIVATE_IRQS);
