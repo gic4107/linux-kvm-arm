@@ -28,7 +28,7 @@ SECTIONS
  .data : { *(.data) }
  .bss : { *(.bss) }
 
- . = EXCEPTION_TABLE - 4096;
+ . = EXCEPTION_TABLE - 8192;
  secondary_stacktop = .;
 
  . = EXCEPTION_TABLE;
