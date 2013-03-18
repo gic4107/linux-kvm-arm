@@ -72,6 +72,7 @@ int test(int smp_cpus, int vgic_enabled);
 extern volatile bool second_cpu_up;
 extern volatile bool first_cpu_ack;
 extern volatile bool ipi_ack;
+extern volatile bool ipi_ready;
 
 static inline void dmb(void)
 {

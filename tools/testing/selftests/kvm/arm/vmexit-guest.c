@@ -88,16 +88,9 @@ static void ipi_test(void)
 {
 	unsigned long val;
 
-	ipi_ack = false;
-
 	/* Signal IPI/SGI IRQ to CPU 1 */
 	val = SGIR_FORMAT(1, sgi_irq);
-
 	writel(vgic_base + GICD_SGIR, val);
-	//dsb();
-	//dmb();
-	//isb();
-
 	while (!ipi_ack);
 }
 
@@ -121,18 +114,25 @@ static void loop_test(struct exit_test *test)
 	unsigned long i, iterations = 32;
 	unsigned long c2, c1, cycles = 0;
 
+	ipi_ready = true;
 	do {
 		iterations *= 2;
+
+		while (test->test_fn == ipi_test && !ipi_ready);
+		ipi_ack = false;
+		ipi_ready = false;
 
 		c1 = read_cc();
 		for (i = 0; i < iterations; i++)
 			test->test_fn();
 		c2 = read_cc();
 
+
 		if (c1 >= c2)
 			continue;
 		cycles = c2 - c1;
 	} while (cycles < GOAL);
+	ipi_ready = true;
 
 	debug("%s exit %u cycles over %u iterations = %u\n",
 	       test->name, cycles, iterations, cycles / iterations);

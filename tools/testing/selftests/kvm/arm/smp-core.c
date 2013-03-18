@@ -9,6 +9,7 @@ __asm__(".arch_extension	virt");
 volatile bool second_cpu_up;
 volatile bool first_cpu_ack;
 volatile bool ipi_ack;
+volatile bool ipi_ready;
 
 void smp_init(void)
 {
@@ -46,8 +47,8 @@ void smp_interrupt(void)
 	/* EOI the interrupt */
 	eoi = MK_EOIR(cpu, irq);
 	writel(VGIC_CPU_BASE + GICC_EOIR, eoi);
-	dsb();
-	dmb();
+
+	ipi_ready = true;
 }
 
 void smp_gic_enable(int smp_cpus, int vgic_enabled)
