@@ -26,7 +26,6 @@ void smp_interrupt(void)
 	int irq, cpu;
 
 	ipi_ack = true;
-	return;
 
 	debug("core[1]: received interrupt\n");
 
@@ -49,8 +48,6 @@ void smp_interrupt(void)
 	writel(VGIC_CPU_BASE + GICC_EOIR, eoi);
 	dsb();
 	dmb();
-
-
 }
 
 void smp_gic_enable(int smp_cpus, int vgic_enabled)
