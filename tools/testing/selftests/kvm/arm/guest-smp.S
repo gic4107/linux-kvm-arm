@@ -54,7 +54,5 @@ secondary_start:
 	cpsie	i	@ Enable Interrupts
 1:	wfi
 	b	1b
-	bl	smp_interrupt
-	b	1b
 
 .ltorg

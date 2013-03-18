@@ -25,6 +25,9 @@ void smp_interrupt(void)
 	unsigned long ack, eoi;
 	int irq, cpu;
 
+	ipi_ack = true;
+	return;
+
 	debug("core[1]: received interrupt\n");
 
 	ack = readl(VGIC_CPU_BASE + GICC_IAR);

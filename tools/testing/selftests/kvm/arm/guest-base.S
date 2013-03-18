@@ -131,28 +131,19 @@ data_abort:
 	ldr	r0, =data_msg
 	b	abort
 
-irq:	ldr	r10, =ipi_ack
-	mov	r9, #1
-	strb	r9, [r10]
-	subs	pc, lr, #4
-
-
-
-	push	{r0, r1, lr}
+irq:	push	{r0, lr}
 	mrc	p15, 0, r0, c0, c0, 5
 	and	r0, r0, #3
 	cmp	r0, #0
+	beq	1f
+	bl	smp_interrupt
+	pop	{r0, lr}
+	subs	pc, lr, #4
 
+1:
 	# Primary CPUs should not receive IRQs
 	ldreq	r0, =irq_msg
 	beq	abort
-
-	# Seconday CPUs should perform an exception return (with IRQ disabled)
-	mov	r0, sp
-	add	sp, #12
-	svc_stub r1
-	mov	r10, #1
-	ldmia	r0, {r0, r1, pc}
 
 fiq:
 	ldr	r0, =fiq_msg
