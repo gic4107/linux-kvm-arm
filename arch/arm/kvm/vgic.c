@@ -92,10 +92,15 @@ static struct device_node *vgic_node;
 #define ACCESS_WRITE_VALUE	(3 << 1)
 #define ACCESS_WRITE_MASK(x)	((x) & (3 << 1))
 
+#define LR_CPUID(lr)	\
+	(((lr) & GICH_LR_PHYSID_CPUID) >> GICH_LR_PHYSID_CPUID_SHIFT)
+#define MK_LR_PEND(src, irq)	\
+	(GICH_LR_PENDING_BIT | ((src) << GICH_LR_PHYSID_CPUID_SHIFT) | (irq))
+
 static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu);
 static void vgic_update_state(struct kvm *kvm);
 static void vgic_kick_vcpus(struct kvm *kvm);
-static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg);
+static bool vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg);
 static u32 vgic_nr_lr;
 
 static unsigned int vgic_maint_irq;
@@ -782,13 +787,70 @@ bool vgic_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	return true;
 }
 
-static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
+/*
+ * vgic_dispatch_sgi_fast - dispatch SGI via fast path
+ * @vcpu:	The vcpu generating the SGI
+ * @sgi:	The irq number used for the SGI
+ * @cpu:	The target virtual cpu id
+ *
+ * Try to queue an SGI directly onto the list register of the target_cpu.
+ * This is safe, because we hold the distributor lock and vgic_sync_hwstate
+ * also holds that lock, there are two case:
+ *   1: The target vcpu is currently running on a physical core and the target
+ *      vcpu is another vcpu than current(), and will either get the IPI
+ *      directly or pick it up in vgic_sync_hwstate.
+ *   2: The target vcpu is not runnning anywhere, and we just abandon the fast
+ *      path and go the traditional route.
+ *
+ * Note that we can send IPIs to ourselves, but that's fine, since the we will
+ * not be running on a physical core and we will just abandon the fast path.
+ *
+ * Return true if we can deliver via fast path, false otherwise.
+ */
+static bool vgic_dispatch_sgi_fast(struct kvm_vcpu *vcpu, int sgi, int cpu)
+{
+	struct kvm_vcpu *target_vcpu = kvm_get_vcpu(vcpu->kvm, cpu);
+	struct vgic_cpu *target_vgic_cpu = &target_vcpu->arch.vgic_cpu;
+	int target_cpuid, lr;
+	int source_id = vcpu->vcpu_id;
+	u32 elrsr[2];
+
+	target_cpuid = target_vgic_cpu->cpuid;
+	if (target_cpuid == VGIC_CPU_NOT_RUNNING)
+		return false;
+
+	elrsr[0] = vgic_readl_cpu(target_cpuid, GICH_ELRSR0);
+	elrsr[1] = vgic_readl_cpu(target_cpuid, GICH_ELRSR1);
+
+	for_each_set_bit(lr, (unsigned long *)elrsr, target_vgic_cpu->nr_lr) {
+		/* TODO: Optimize the below (remember to deal with EOIs) */
+		if (test_bit(lr, target_vgic_cpu->lr_used))
+			continue;
+
+		vgic_set_lr_mapping(target_vcpu, sgi, lr);
+		target_vgic_cpu->vgic_lr[lr] = MK_LR_PEND(source_id, sgi);
+		set_bit(lr, target_vgic_cpu->lr_used);
+		vgic_writel_cpu(target_cpuid, target_vgic_cpu->vgic_lr[lr],
+				GICH_LR0 + (4 * lr));
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * Return true if all target cpus could be directly dispatched onto LRs,
+ * otherwise return false meaning this has to be queued on the virtual
+ * distributor.
+ */
+static bool vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
 {
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	int nrcpus = atomic_read(&kvm->online_vcpus);
 	u8 target_cpus;
 	int sgi, mode, c, vcpu_id;
+	bool ret = true;
 
 	vcpu_id = vcpu->vcpu_id;
 
@@ -803,7 +865,7 @@ static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
 		kvm_debug("vgic_dispatch_sgi mode %d target_cpus %x\n",
 			  mode, target_cpus);
 		if (!target_cpus)
-			return;
+			return true;
 
 	case 1:
 		target_cpus = ((1 << nrcpus) - 1) & ~(1 << vcpu_id) & 0xff;
@@ -817,13 +879,18 @@ static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
 	kvm_for_each_vcpu(c, vcpu, kvm) {
 		if (target_cpus & 1) {
 			/* Flag the SGI as pending */
-			vgic_dist_irq_set(vcpu, sgi);
-			dist->irq_sgi_sources[c][sgi] |= 1 << vcpu_id;
 			kvm_debug("SGI%d from CPU%d to CPU%d\n", sgi, vcpu_id, c);
+			if (!vgic_dispatch_sgi_fast(vcpu, sgi, c)) {
+				vgic_dist_irq_set(vcpu, sgi);
+				dist->irq_sgi_sources[c][sgi] |= 1 << vcpu_id;
+				ret = false;
+			}
 		}
 
 		target_cpus >>= 1;
 	}
+
+	return ret;
 }
 
 static int compute_pending_for_cpu(struct kvm_vcpu *vcpu)
@@ -876,11 +943,6 @@ static void vgic_update_state(struct kvm *kvm)
 		}
 	}
 }
-
-#define LR_CPUID(lr)	\
-	(((lr) & GICH_LR_PHYSID_CPUID) >> GICH_LR_PHYSID_CPUID_SHIFT)
-#define MK_LR_PEND(src, irq)	\
-	(GICH_LR_PENDING_BIT | ((src) << GICH_LR_PHYSID_CPUID_SHIFT) | (irq))
 
 /*
  * An interrupt may have been disabled after being made pending on the
