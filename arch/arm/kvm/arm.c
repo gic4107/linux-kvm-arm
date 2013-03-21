@@ -727,6 +727,104 @@ static void calc_ws_stats(struct kvm_vcpu *vcpu)
 	calc_avg(abt);
 }
 
+#define MAXCYCLES (1ULL << 28)
+#ifdef HYP_MEASURE_USE_PCOUNTER
+typedef unsigned long long cctype;
+#else
+typedef unsigned long cctype;
+#endif
+static void measure_hyp(void)
+{
+	unsigned long iter = 32;
+	unsigned long long trap_in = 0, trap_out = 0;
+	bool count_ok = true;
+	unsigned long i;
+	cctype cc0, cc1, cc2;
+
+#ifdef HYP_MEASURE_USE_PCOUNTER
+	unsigned long freq;
+	asm volatile("mrc p15, 0, %[freq], c14, c0, 0": [freq] "=r" (freq));
+	kvm_err("%s: counter freq: %lu\n", __func__, freq);
+#else
+	kvm_err("%s: enter\n", __func__);
+#endif
+
+	local_irq_disable();
+	do {
+		trap_in = trap_out = 0;
+		cc0 = cc1 = cc2 = 0;
+
+		for (i = 0; i < iter; i++) {
+#ifdef HYP_MEASURE_USE_PCOUNTER
+			unsigned long cc0_l, cc0_h, cc1_l, cc1_h, cc2_l, cc2_h;
+			asm volatile(
+				"mrrc p15, 0, r0, r1, c14\n\t"
+				"hvc	#0\n\t"
+				"mrrc p15, 0, r4, r5, c14\n\t"
+				"mov	%[cc0_l], r0\n\t"
+				"mov	%[cc0_h], r1\n\t"
+				"mov	%[cc1_l], r2\n\t"
+				"mov	%[cc1_h], r3\n\t"
+				"mov	%[cc2_l], r4\n\t"
+				"mov	%[cc2_h], r5\n\t" :
+				[cc0_l] "=r" (cc0_l),
+				[cc0_h] "=r" (cc0_h),
+				[cc1_l] "=r" (cc1_l),
+				[cc1_h] "=r" (cc1_h),
+				[cc2_l] "=r" (cc2_l),
+				[cc2_h] "=r" (cc2_h) : :
+				"r0", "r1", "r2", "r3", "r4", "r5");
+			cc0 = ((u64)cc0_h << 32) | (u64)cc0_l;
+			cc1 = ((u64)cc1_h << 32) | (u64)cc1_l;
+			cc2 = ((u64)cc2_h << 32) | (u64)cc2_l;
+			trap_in += cc1 - cc0;
+			trap_out += cc2 - cc1;
+#else
+			unsigned long cc0 = 0, cc1 = 0, cc2 = 0;
+			asm volatile(
+				"mrc	p15, 0, r0, c9, c13, 0\n\t"
+				"hvc	#0\n\t"
+				"mrc	p15, 0, r2, c9, c13, 0\n\t"
+				"mov	%[cc0], r0\n\t"
+				"mov	%[cc1], r1\n\t"
+				"mov	%[cc2], r2\n\t":
+				[cc0] "=r" (cc0),
+				[cc1] "=r" (cc1),
+				[cc2] "=r" (cc2): :
+				"r0", "r1", "r2");
+
+			trap_in += cc1 - cc0;
+			trap_out += cc2 - cc1;
+#endif
+
+		};
+
+		if (cc0 > cc2 || cc0 > cc1)
+			continue;
+
+		if (cc0 == cc1 || cc1 == cc2) {
+			count_ok = false;
+			break;
+		}
+		kvm_err("%s: iter: %lu\n", __func__, iter);
+
+		iter = iter << 1;
+	} while (trap_in < (1 << 28) && trap_out < (1 << 28));
+	local_irq_enable();
+
+	if (!count_ok) {
+		kvm_err("trap_measure: cycle counter not enabled or overflowed\n");
+		kvm_err("trap_measure: cc0: %llu, cc1: %llu, cc2: %llu\n",
+			(u64)cc0, (u64)cc1, (u64)cc2);
+		return;
+	}
+
+	kvm_err("trap_measure: trap_in cycles %llu over %lu iterations: %lu\n",
+		 trap_in, iter, (u32)trap_in / iter);
+	kvm_err("trap_measure: trap_out cycles %llu over %lu iterations: %lu\n",
+		 trap_out, iter, (u32)trap_out / iter);
+}
+
 /**
  * kvm_arch_vcpu_ioctl_run - the main VCPU run function to execute guest code
  * @vcpu:	The VCPU pointer
@@ -742,6 +840,9 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 {
 	int ret;
 	sigset_t sigsaved;
+
+	measure_hyp();
+	return -ENOEXEC;
 
 	/* Make sure they initialize the vcpu with KVM_ARM_VCPU_INIT */
 	if (unlikely(vcpu->arch.target < 0))
@@ -1031,6 +1132,7 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		return -EINVAL;
 	}
 }
+
 
 static void cpu_init_hyp_mode(void *vector)
 {

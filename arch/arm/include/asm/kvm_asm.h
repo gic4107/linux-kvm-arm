@@ -19,6 +19,8 @@
 #ifndef __ARM_KVM_ASM_H__
 #define __ARM_KVM_ASM_H__
 
+#define HYP_MEASURE_USE_PCOUNTER
+
 /* 0 is reserved as an invalid value. */
 #define c0_MPIDR	1	/* MultiProcessor ID Register */
 #define c0_CSSELR	2	/* Cache Size Selection Register */

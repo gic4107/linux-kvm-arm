@@ -341,6 +341,13 @@ hyp_dabt:
 
 	.align
 hyp_hvc:
+#ifdef HYP_MEASURE_USE_PCOUNTER
+	mrrc	p15, 0, r2, r3, c14
+#else
+	mrc	p15, 0, r1, c9, c13, 0
+#endif
+	eret
+
 	/*
 	 * Getting here is either becuase of a trap from a guest or from calling
 	 * HVC from the host kernel, which means "switch to Hyp mode".
