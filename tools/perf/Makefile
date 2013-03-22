@@ -505,6 +505,8 @@ ifneq ($(call try-cc,$(SOURCE_LIBUNWIND),$(FLAGS_UNWIND)),y)
 endif # Libunwind support
 endif # NO_LIBUNWIND
 
+-include arch/$(ARCH)/Makefile
+
 ifneq ($(OUTPUT),)
 	BASIC_CFLAGS += -I$(OUTPUT)
 endif
@@ -645,8 +647,6 @@ else
 		LIB_OBJS += $(OUTPUT)scripts/perl/Perf-Trace-Util/Context.o
 	endif
 endif
-
-include arch/$(ARCH)/Makefile
 
 disable-python = $(eval $(disable-python_code))
 define disable-python_code
