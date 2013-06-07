@@ -2282,6 +2282,10 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 		ops = &kvm_xics_ops;
 		break;
 #endif
+#ifdef CONFIG_KVM_ARM_VGIC
+	case KVM_DEV_TYPE_ARM_VGIC:
+		ops = &kvm_arm_vgic_ops;
+#endif
 	default:
 		return -ENODEV;
 	}
