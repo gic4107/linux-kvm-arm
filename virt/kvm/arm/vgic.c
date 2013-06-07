@@ -1497,3 +1497,37 @@ int kvm_vgic_set_addr(struct kvm *kvm, unsigned long type, u64 addr)
 	mutex_unlock(&kvm->lock);
 	return r;
 }
+
+static int vgic_set_attr(struct kvm_device *dev, struct kvm_device_attr *attr)
+{
+	return -ENXIO;
+}
+
+static int vgic_get_attr(struct kvm_device *dev, struct kvm_device_attr *attr)
+{
+	return -ENXIO;
+}
+
+static int vgic_has_attr(struct kvm_device *dev, struct kvm_device_attr *attr)
+{
+	return -ENXIO;
+}
+
+static void vgic_destroy(struct kvm_device *dev)
+{
+	kfree(dev);
+}
+
+static int vgic_create(struct kvm_device *dev, u32 type)
+{
+	return kvm_vgic_create(dev->kvm);
+}
+
+struct kvm_device_ops kvm_arm_vgic_ops = {
+	.name = "kvm-arm-vgic",
+	.create = vgic_create,
+	.destroy = vgic_destroy,
+	.set_attr = vgic_set_attr,
+	.get_attr = vgic_get_attr,
+	.has_attr = vgic_has_attr,
+};
