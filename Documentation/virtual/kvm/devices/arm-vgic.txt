@@ -19,3 +19,34 @@ Groups:
     KVM_VGIC_V2_ADDR_TYPE_CPU (rw, 64-bit)
       Base address in the guest physical address space of the GIC virtual cpu
       interface register mappings.
+
+  KVM_DEV_ARM_VGIC_GRP_DIST_REGS
+  Attributes:
+    The attr field of kvm_device_attr encodes two values:
+    bits:     | 63   ....  40 | 39 ..  32  |  31   ....    0 |
+    values:   |    reserved   |   cpu id   |      offset     |
+
+    The offset is relative to the "Distributor base address" as defined in the
+    GICv2 specs.  Getting or setting such a register has the same effect as
+    reading or writing the register on the actual hardware from the cpu
+    specified with cpu id field.  Note that most distributor fields are not
+    banked, but return the same value regardless of the cpu id used to access
+    the register.
+  Limitations:
+    - Priorities are not implemented, and registers are RAZ/WI
+  Errors:
+    - ENODEV: Getting or setting this register is not yet supported
+
+  KVM_DEV_ARM_VGIC_GRP_CPU_REGS
+  Attributes:
+    The attr field of kvm_device_attr encodes two values:
+    bits:     | 63   ....  40 | 39 ..  32  |  31   ....    0 |
+    values:   |    reserved   |   cpu id   |      offset     |
+
+    The offsetspecifies the offset from the "CPU interface base address" as
+    defined in the GICv2 specs.  Getting or setting such a register has the
+    same effect as reading or writing the register on the actual hardware.
+  Limitations:
+    - Priorities are not implemented, and registers are RAZ/WI
+  Errors:
+    - ENODEV: Getting or setting this register is not yet supported
