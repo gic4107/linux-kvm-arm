@@ -38,8 +38,8 @@
 
 /* We don't currently support large pages. */
 #define KVM_HPAGE_GFN_SHIFT(x)	0
-#define KVM_NR_PAGE_SIZES	1
-#define KVM_PAGES_PER_HPAGE(x)	(1UL<<31)
+#define KVM_HPAGE_SIZE		1
+#define KVM_PAGES_PER_HPAGE	(1UL<<31)
 
 struct kvm_vcpu;
 int kvm_target_cpu(void);
