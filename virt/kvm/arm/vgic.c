@@ -389,9 +389,14 @@ static bool handle_mmio_set_pending_reg(struct kvm_vcpu *vcpu,
 {
 	u32 *reg = vgic_bitmap_get_reg(&vcpu->kvm->arch.vgic.irq_state,
 				       vcpu->vcpu_id, offset);
+	u32 old = *reg;
+
 	vgic_reg_access(mmio, reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_SETBIT);
 	if (mmio->is_write) {
+		/* Writes to SGIs are ignored for the pending regs */
+		if (!(offset >> 2)
+		    *reg = (*reg & (0xffff << 16)) | (old & 0xffff);
 		vgic_update_state(vcpu->kvm);
 		return true;
 	}
@@ -405,9 +410,15 @@ static bool handle_mmio_clear_pending_reg(struct kvm_vcpu *vcpu,
 {
 	u32 *reg = vgic_bitmap_get_reg(&vcpu->kvm->arch.vgic.irq_state,
 				       vcpu->vcpu_id, offset);
+	u32 old = *reg;
+
+
 	vgic_reg_access(mmio, reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_CLEARBIT);
 	if (mmio->is_write) {
+		/* Writes to SGIs are ignored for the pending regs */
+		if (!(offset >> 2)
+		    *reg = (*reg & (0xffff << 16)) | (old & 0xffff);
 		vgic_update_state(vcpu->kvm);
 		return true;
 	}
