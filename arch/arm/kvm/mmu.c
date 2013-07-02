@@ -614,8 +614,8 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	unsigned long psize;
 
 	write_fault = kvm_is_write_fault(kvm_vcpu_get_hsr(vcpu));
-	trace_kvm_user_mem_abort(*vcpu_pc(vcpu), vcpu->arch.hsr,
-				 vcpu->arch.hxfar, fault_ipa);
+	trace_kvm_user_mem_abort(*vcpu_pc(vcpu), kvm_vcpu_get_hsr(vcpu),
+				 kvm_vcpu_get_hfar(vcpu), fault_ipa);
 
 	if (fault_status == FSC_PERM && !write_fault) {
 		kvm_err("Unexpected L2 read permission error\n");
