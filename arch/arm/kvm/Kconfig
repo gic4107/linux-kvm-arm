@@ -22,7 +22,7 @@ config KVM
 	select ANON_INODES
 	select KVM_MMIO
 	select KVM_ARM_HOST
-	depends on ARM_VIRT_EXT && ARM_LPAE
+	depends on ARM_VIRT_EXT && ARM_LPAE && HUGETLB_PAGE
 	---help---
 	  Support hosting virtualized guest machines. You will also
 	  need to select one or more of the processor modules below.
