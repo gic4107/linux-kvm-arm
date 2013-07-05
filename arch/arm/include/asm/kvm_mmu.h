@@ -62,6 +62,12 @@ phys_addr_t kvm_get_idmap_vector(void);
 int kvm_mmu_init(void);
 void kvm_clear_hyp_idmap(void);
 
+static inline void kvm_set_pmd(pmd_t *pmd, pmd_t new_pmd)
+{
+	pmd_val(*pmd) = new_pmd;
+	flush_pmd_entry(pmd);
+}
+
 static inline void kvm_set_pte(pte_t *pte, pte_t new_pte)
 {
 	pte_val(*pte) = new_pte;
