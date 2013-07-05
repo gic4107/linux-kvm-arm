@@ -484,11 +484,14 @@ static int stage2_set_pte(struct kvm *kvm, struct kvm_mmu_memory_cache *cache,
 
 	/* Create 2nd stage section mappings (huge tlb pages) - Level 2 */
 	if (pte_huge(*new_pte) || pmd_huge(*pmd)) {
-		pte_t *huge_pte = (pte_t *)pmd;
+		/*
+		 * Changes from huge->non-huge and vice versa are handled
+		 * through MMU notifiers.
+		 */
 		VM_BUG_ON(pmd_present(*pmd) && !pmd_huge(*pmd));
 
 		old_pmd = *pmd;
-		kvm_set_pte(huge_pte, *new_pte); /* new_pte really new_pmd */
+		kvm_set_pmd(pmd, *new_pte); /* new_pte really new_pmd */
 		if (pmd_present(old_pmd))
 			kvm_tlb_flush_vmid_ipa(kvm, addr);
 		else
