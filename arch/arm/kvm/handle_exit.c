@@ -46,7 +46,6 @@ static int handle_hvc(struct kvm_vcpu *vcpu, struct kvm_run *run)
 	if (kvm_psci_call(vcpu))
 		return 1;
 
-	kvm_inject_undefined(vcpu);
 	return 1;
 }
 
