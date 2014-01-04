@@ -46,6 +46,12 @@ static int handle_hvc(struct kvm_vcpu *vcpu, struct kvm_run *run)
 	if (kvm_psci_call(vcpu))
 		return 1;
 
+	if (*vcpu_reg(vcpu, 0) == 0x4b000000) {
+		/* Dummy HVC for measurements */
+		return 1;
+	}
+
+	kvm_inject_undefined(vcpu);
 	return 1;
 }
 
