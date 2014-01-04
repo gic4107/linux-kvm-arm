@@ -231,11 +231,14 @@ __setup("noalign", noalign_setup);
 #endif /* ifdef CONFIG_CPU_CP15 / else */
 
 #define PROT_PTE_DEVICE		L_PTE_PRESENT|L_PTE_YOUNG|L_PTE_DIRTY|L_PTE_XN
+#define PROT_PTE_S2_DEVICE	PROT_PTE_DEVICE
 #define PROT_SECT_DEVICE	PMD_TYPE_SECT|PMD_SECT_AP_WRITE
 
 static struct mem_type mem_types[] = {
 	[MT_DEVICE] = {		  /* Strongly ordered / ARMv6 shared device */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_SHARED |
+				  L_PTE_SHARED,
+		.prot_pte_s2	= PROT_PTE_S2_DEVICE | L_PTE_S2_MT_DEV_SHARED |
 				  L_PTE_SHARED,
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE | PMD_SECT_S,
@@ -243,24 +246,29 @@ static struct mem_type mem_types[] = {
 	},
 	[MT_DEVICE_NONSHARED] = { /* ARMv6 non-shared device */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_NONSHARED,
+		.prot_pte_s2	= PROT_PTE_S2_DEVICE |
+				  L_PTE_S2_MT_DEV_NONSHARED,
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE,
 		.domain		= DOMAIN_IO,
 	},
 	[MT_DEVICE_CACHED] = {	  /* ioremap_cached */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_CACHED,
+		.prot_pte_s2	= PROT_PTE_S2_DEVICE | L_PTE_S2_MT_DEV_CACHED,
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE | PMD_SECT_WB,
 		.domain		= DOMAIN_IO,
 	},
 	[MT_DEVICE_WC] = {	/* ioremap_wc */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_WC,
+		.prot_pte_s2	= PROT_PTE_S2_DEVICE | L_PTE_S2_MT_DEV_WC,
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE,
 		.domain		= DOMAIN_IO,
 	},
 	[MT_UNCACHED] = {
 		.prot_pte	= PROT_PTE_DEVICE,
+		.prot_pte_s2	= PROT_PTE_S2_DEVICE | L_PTE_S2_MT_UNCACHED,
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PMD_TYPE_SECT | PMD_SECT_XN,
 		.domain		= DOMAIN_IO,
@@ -458,7 +466,8 @@ static void __init build_mem_type_table(void)
 	cp = &cache_policies[cachepolicy];
 	vecs_pgprot = kern_pgprot = user_pgprot = cp->pte;
 	s2_pgprot = cp->pte_s2;
-	hyp_device_pgprot = s2_device_pgprot = mem_types[MT_DEVICE].prot_pte;
+	hyp_device_pgprot = mem_types[MT_DEVICE].prot_pte;
+	s2_device_pgprot = mem_types[MT_DEVICE].prot_pte_s2;
 
 	/*
 	 * ARMv6 and above have extended page tables.
