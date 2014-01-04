@@ -10,33 +10,80 @@
  * Tracepoints for entry/exit to guest
  */
 TRACE_EVENT(kvm_entry,
-	TP_PROTO(unsigned long vcpu_pc),
-	TP_ARGS(vcpu_pc),
+	TP_PROTO(unsigned long vcpu_pc, int vcpu),
+	TP_ARGS(vcpu_pc, vcpu),
 
 	TP_STRUCT__entry(
 		__field(	unsigned long,	vcpu_pc		)
+		__field(	int	,	vcpu		)
 	),
 
 	TP_fast_assign(
 		__entry->vcpu_pc		= vcpu_pc;
+		__entry->vcpu			= vcpu;
 	),
 
-	TP_printk("PC: 0x%08lx", __entry->vcpu_pc)
+	TP_printk("[vcpu %d] PC: 0x%08lx", __entry->vcpu, __entry->vcpu_pc)
 );
 
 TRACE_EVENT(kvm_exit,
-	TP_PROTO(unsigned long vcpu_pc),
-	TP_ARGS(vcpu_pc),
+	TP_PROTO(unsigned long vcpu_pc, int exception_idx, int vcpu),
+	TP_ARGS(vcpu_pc, exception_idx, vcpu),
 
 	TP_STRUCT__entry(
 		__field(	unsigned long,	vcpu_pc		)
+		__field(	int,		exception_idx	)
+		__field(	int,		vcpu		)
 	),
 
 	TP_fast_assign(
 		__entry->vcpu_pc		= vcpu_pc;
+		__entry->exception_idx		= exception_idx;
+		__entry->vcpu			= vcpu;
 	),
 
-	TP_printk("PC: 0x%08lx", __entry->vcpu_pc)
+	TP_printk("[vcpu %d] PC: 0x%08lx (exception idx: %d)",
+		  __entry->vcpu, __entry->vcpu_pc, __entry->exception_idx)
+);
+
+TRACE_EVENT(kvm_psci_call,
+	TP_PROTO(unsigned long vcpu_pc, unsigned long psci_fn, int vcpu),
+	TP_ARGS(vcpu_pc, psci_fn, vcpu),
+
+	TP_STRUCT__entry(
+		__field(	unsigned long,	vcpu_pc		)
+		__field(	unsigned long,	psci_fn		)
+		__field(	u8	,	vcpu		)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_pc		= vcpu_pc;
+		__entry->psci_fn		= psci_fn;
+		__entry->vcpu			= vcpu;
+	),
+
+	TP_printk("[vcpu %d] PSCI function: %lu PC: 0x%08lx",
+		  __entry->vcpu, __entry->psci_fn, __entry->vcpu_pc)
+);
+
+TRACE_EVENT(kvm_handle_exit,
+	TP_PROTO(unsigned long vcpu_pc, u8 ec, int vcpu),
+	TP_ARGS(vcpu_pc, ec, vcpu),
+
+	TP_STRUCT__entry(
+		__field(	unsigned long,	vcpu_pc		)
+		__field(	u8	,	ec		)
+		__field(	u8	,	vcpu		)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_pc		= vcpu_pc;
+		__entry->ec			= ec;
+		__entry->vcpu			= vcpu;
+	),
+
+	TP_printk("[vcpu %d] PC: 0x%08lx (ec: %d)",
+		  __entry->vcpu, __entry->vcpu_pc, __entry->ec)
 );
 
 TRACE_EVENT(kvm_guest_fault,

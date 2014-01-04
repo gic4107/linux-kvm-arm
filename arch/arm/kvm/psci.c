@@ -22,6 +22,8 @@
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_psci.h>
 
+#include "trace.h"
+
 /*
  * This is an implementation of the Power State Coordination Interface
  * as described in ARM document number ARM DEN 0022A.
@@ -99,6 +101,8 @@ bool kvm_psci_call(struct kvm_vcpu *vcpu)
 {
 	unsigned long psci_fn = *vcpu_reg(vcpu, 0) & ~((u32) 0);
 	unsigned long val;
+
+	trace_kvm_psci_call(*vcpu_pc(vcpu), psci_fn, vcpu->vcpu_id);
 
 	switch (psci_fn) {
 	case KVM_PSCI_FN_CPU_OFF:

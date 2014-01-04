@@ -582,7 +582,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		/**************************************************************
 		 * Enter the guest
 		 */
-		trace_kvm_entry(*vcpu_pc(vcpu));
+		trace_kvm_entry(*vcpu_pc(vcpu), vcpu->vcpu_id);
 		kvm_guest_enter();
 		vcpu->mode = IN_GUEST_MODE;
 
@@ -591,7 +591,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		vcpu->mode = OUTSIDE_GUEST_MODE;
 		vcpu->arch.last_pcpu = smp_processor_id();
 		kvm_guest_exit();
-		trace_kvm_exit(*vcpu_pc(vcpu));
+		trace_kvm_exit(*vcpu_pc(vcpu), ret, vcpu->vcpu_id);
 		/*
 		 * We may have taken a host interrupt in HYP mode (ie
 		 * while executing the guest). This interrupt is still
