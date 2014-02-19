@@ -169,6 +169,8 @@ struct kvm_pit_config {
 #define KVM_EXIT_PAPR_HCALL	  19
 #define KVM_EXIT_S390_UCONTROL	  20
 #define KVM_EXIT_WATCHDOG         21
+#define KVM_EXIT_S390_TSCH        22
+#define KVM_EXIT_EPR              23
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
@@ -286,6 +288,19 @@ struct kvm_run {
 			__u64 ret;
 			__u64 args[9];
 		} papr_hcall;
+		/* KVM_EXIT_S390_TSCH */
+		struct {
+			__u16 subchannel_id;
+			__u16 subchannel_nr;
+			__u32 io_int_parm;
+			__u32 io_int_word;
+			__u32 ipb;
+			__u8 dequeued;
+		} s390_tsch;
+		/* KVM_EXIT_EPR */
+		struct {
+			__u32 epr;
+		} epr;
 		/* Fix the size of the union. */
 		char padding[256];
 	};
@@ -398,10 +413,20 @@ struct kvm_s390_psw {
 #define KVM_S390_PROGRAM_INT		0xfffe0001u
 #define KVM_S390_SIGP_SET_PREFIX	0xfffe0002u
 #define KVM_S390_RESTART		0xfffe0003u
+#define KVM_S390_MCHK			0xfffe1000u
 #define KVM_S390_INT_VIRTIO		0xffff2603u
 #define KVM_S390_INT_SERVICE		0xffff2401u
 #define KVM_S390_INT_EMERGENCY		0xffff1201u
 #define KVM_S390_INT_EXTERNAL_CALL	0xffff1202u
+/* Anything below 0xfffe0000u is taken by INT_IO */
+#define KVM_S390_INT_IO(ai,cssid,ssid,schid)   \
+	(((schid)) |			       \
+	 ((ssid) << 16) |		       \
+	 ((cssid) << 18) |		       \
+	 ((ai) << 26))
+#define KVM_S390_INT_IO_MIN		0x00000000u
+#define KVM_S390_INT_IO_MAX		0xfffdffffu
+
 
 struct kvm_s390_interrupt {
 	__u32 type;
@@ -424,12 +449,15 @@ enum {
 	kvm_ioeventfd_flag_nr_datamatch,
 	kvm_ioeventfd_flag_nr_pio,
 	kvm_ioeventfd_flag_nr_deassign,
+	kvm_ioeventfd_flag_nr_virtio_ccw_notify,
 	kvm_ioeventfd_flag_nr_max,
 };
 
 #define KVM_IOEVENTFD_FLAG_DATAMATCH (1 << kvm_ioeventfd_flag_nr_datamatch)
 #define KVM_IOEVENTFD_FLAG_PIO       (1 << kvm_ioeventfd_flag_nr_pio)
 #define KVM_IOEVENTFD_FLAG_DEASSIGN  (1 << kvm_ioeventfd_flag_nr_deassign)
+#define KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY \
+	(1 << kvm_ioeventfd_flag_nr_virtio_ccw_notify)
 
 #define KVM_IOEVENTFD_VALID_FLAG_MASK  ((1 << kvm_ioeventfd_flag_nr_max) - 1)
 
@@ -533,9 +561,7 @@ struct kvm_ppc_smmu_info {
 #define KVM_CAP_MP_STATE 14
 #define KVM_CAP_COALESCED_MMIO 15
 #define KVM_CAP_SYNC_MMU 16  /* Changes to host mmap are reflected in guest */
-#ifdef __KVM_HAVE_DEVICE_ASSIGNMENT
 #define KVM_CAP_DEVICE_ASSIGNMENT 17
-#endif
 #define KVM_CAP_IOMMU 18
 #ifdef __KVM_HAVE_MSI
 #define KVM_CAP_DEVICE_MSI 20
@@ -551,13 +577,9 @@ struct kvm_ppc_smmu_info {
 #ifdef __KVM_HAVE_PIT
 #define KVM_CAP_REINJECT_CONTROL 24
 #endif
-#ifdef __KVM_HAVE_IOAPIC
 #define KVM_CAP_IRQ_ROUTING 25
-#endif
 #define KVM_CAP_IRQ_INJECT_STATUS 26
-#ifdef __KVM_HAVE_DEVICE_ASSIGNMENT
 #define KVM_CAP_DEVICE_DEASSIGNMENT 27
-#endif
 #ifdef __KVM_HAVE_MSIX
 #define KVM_CAP_DEVICE_MSIX 28
 #endif
@@ -636,8 +658,15 @@ struct kvm_ppc_smmu_info {
 #define KVM_CAP_IRQFD_RESAMPLE 82
 #define KVM_CAP_PPC_BOOKE_WATCHDOG 83
 #define KVM_CAP_PPC_HTAB_FD 84
-#define KVM_CAP_ARM_SET_DEVICE_ADDR 85
-#define KVM_CAP_ARM_PSCI 86
+#define KVM_CAP_S390_CSS_SUPPORT 85
+#define KVM_CAP_PPC_EPR 86
+#define KVM_CAP_ARM_PSCI 87
+#define KVM_CAP_ARM_SET_DEVICE_ADDR 88
+#define KVM_CAP_DEVICE_CTRL 89
+#define KVM_CAP_IRQ_MPIC 90
+#define KVM_CAP_PPC_RTAS 91
+#define KVM_CAP_IRQ_XICS 92
+#define KVM_CAP_ARM_EL1_32BIT 93
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -755,6 +784,7 @@ struct kvm_dirty_tlb {
 #define KVM_REG_IA64		0x3000000000000000ULL
 #define KVM_REG_ARM		0x4000000000000000ULL
 #define KVM_REG_S390		0x5000000000000000ULL
+#define KVM_REG_ARM64		0x6000000000000000ULL
 
 #define KVM_REG_SIZE_SHIFT	52
 #define KVM_REG_SIZE_MASK	0x00f0000000000000ULL
@@ -789,6 +819,28 @@ struct kvm_arm_device_addr {
 	__u64 id;
 	__u64 addr;
 };
+
+/*
+ * Device control API, available with KVM_CAP_DEVICE_CTRL
+ */
+#define KVM_CREATE_DEVICE_TEST		1
+
+struct kvm_create_device {
+	__u32	type;	/* in: KVM_DEV_TYPE_xxx */
+	__u32	fd;	/* out: device handle */
+	__u32	flags;	/* in: KVM_CREATE_DEVICE_xxx */
+};
+
+struct kvm_device_attr {
+	__u32	flags;		/* no flags currently defined */
+	__u32	group;		/* device-defined */
+	__u64	attr;		/* group-defined */
+	__u64	addr;		/* userspace address of attr data */
+};
+
+#define KVM_DEV_TYPE_FSL_MPIC_20	1
+#define KVM_DEV_TYPE_FSL_MPIC_42	2
+#define KVM_DEV_TYPE_XICS		3
 
 /*
  * ioctls for VM fds
@@ -877,6 +929,16 @@ struct kvm_s390_ucas_mapping {
 #define KVM_PPC_GET_HTAB_FD	  _IOW(KVMIO,  0xaa, struct kvm_get_htab_fd)
 /* Available with KVM_CAP_ARM_SET_DEVICE_ADDR */
 #define KVM_ARM_SET_DEVICE_ADDR	  _IOW(KVMIO,  0xab, struct kvm_arm_device_addr)
+/* Available with KVM_CAP_PPC_RTAS */
+#define KVM_PPC_RTAS_DEFINE_TOKEN _IOW(KVMIO,  0xac, struct kvm_rtas_token_args)
+
+/* ioctl for vm fd */
+#define KVM_CREATE_DEVICE	  _IOWR(KVMIO,  0xe0, struct kvm_create_device)
+
+/* ioctls for fds returned by KVM_CREATE_DEVICE */
+#define KVM_SET_DEVICE_ATTR	  _IOW(KVMIO,  0xe1, struct kvm_device_attr)
+#define KVM_GET_DEVICE_ATTR	  _IOW(KVMIO,  0xe2, struct kvm_device_attr)
+#define KVM_HAS_DEVICE_ATTR	  _IOW(KVMIO,  0xe3, struct kvm_device_attr)
 
 /*
  * ioctls for vcpu fds

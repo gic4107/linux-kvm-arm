@@ -39,6 +39,11 @@
 void *empty_zero_page;
 EXPORT_SYMBOL(empty_zero_page);
 
+#if !defined(CONFIG_SUN3) && !defined(CONFIG_COLDFIRE)
+extern void init_pointer_table(unsigned long ptable);
+extern pmd_t *zero_pgtable;
+#endif
+
 #ifdef CONFIG_MMU
 
 pg_data_t pg_data_map[MAX_NUMNODES];
@@ -68,9 +73,6 @@ void __init m68k_setup_node(int node)
 	pg_data_map[node].bdata = bootmem_node_data + node;
 	node_set_online(node);
 }
-
-extern void init_pointer_table(unsigned long ptable);
-extern pmd_t *zero_pgtable;
 
 #else /* CONFIG_MMU */
 
@@ -108,18 +110,7 @@ void __init paging_init(void)
 void free_initmem(void)
 {
 #ifndef CONFIG_MMU_SUN3
-	unsigned long addr;
-
-	addr = (unsigned long) __init_begin;
-	for (; addr < ((unsigned long) __init_end); addr += PAGE_SIZE) {
-		ClearPageReserved(virt_to_page(addr));
-		init_page_count(virt_to_page(addr));
-		free_page(addr);
-		totalram_pages++;
-	}
-	pr_notice("Freeing unused kernel memory: %luk freed (0x%x - 0x%x)\n",
-		(addr - (unsigned long) __init_begin) >> 10,
-		(unsigned int) __init_begin, (unsigned int) __init_end);
+	free_initmem_default(0);
 #endif /* CONFIG_MMU_SUN3 */
 }
 
@@ -186,7 +177,7 @@ void __init mem_init(void)
 		}
 	}
 
-#if !defined(CONFIG_SUN3) && !defined(CONFIG_COLDFIRE)
+#if defined(CONFIG_MMU) && !defined(CONFIG_SUN3) && !defined(CONFIG_COLDFIRE)
 	/* insert pointer tables allocated so far into the tablelist */
 	init_pointer_table((unsigned long)kernel_pg_dir);
 	for (i = 0; i < PTRS_PER_PGD; i++) {
@@ -211,15 +202,6 @@ void __init mem_init(void)
 #ifdef CONFIG_BLK_DEV_INITRD
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
-	int pages = 0;
-	for (; start < end; start += PAGE_SIZE) {
-		ClearPageReserved(virt_to_page(start));
-		init_page_count(virt_to_page(start));
-		free_page(start);
-		totalram_pages++;
-		pages++;
-	}
-	pr_notice("Freeing initrd memory: %dk freed\n",
-		pages << (PAGE_SHIFT - 10));
+	free_reserved_area(start, end, 0, "initrd");
 }
 #endif

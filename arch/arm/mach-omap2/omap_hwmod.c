@@ -138,6 +138,11 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/bootmem.h>
+#include <linux/cpu.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
+
+#include <asm/system_misc.h>
 
 #include "clock.h"
 #include "omap_hwmod.h"
@@ -608,8 +613,6 @@ static int _enable_wakeup(struct omap_hwmod *oh, u32 *v)
 
 	/* XXX test pwrdm_get_wken for this hwmod's subsystem */
 
-	oh->_int_flags |= _HWMOD_WAKEUP_ENABLED;
-
 	return 0;
 }
 
@@ -642,8 +645,6 @@ static int _disable_wakeup(struct omap_hwmod *oh, u32 *v)
 		_set_master_standbymode(oh, HWMOD_IDLEMODE_SMART, v);
 
 	/* XXX test pwrdm_get_wken for this hwmod's subsystem */
-
-	oh->_int_flags &= ~_HWMOD_WAKEUP_ENABLED;
 
 	return 0;
 }
@@ -1366,7 +1367,9 @@ static void _enable_sysc(struct omap_hwmod *oh)
 	}
 
 	if (sf & SYSC_HAS_MIDLEMODE) {
-		if (oh->flags & HWMOD_SWSUP_MSTANDBY) {
+		if (oh->flags & HWMOD_FORCE_MSTANDBY) {
+			idlemode = HWMOD_IDLEMODE_FORCE;
+		} else if (oh->flags & HWMOD_SWSUP_MSTANDBY) {
 			idlemode = HWMOD_IDLEMODE_NO;
 		} else {
 			if (sf & SYSC_HAS_ENAWAKEUP)
@@ -1438,7 +1441,8 @@ static void _idle_sysc(struct omap_hwmod *oh)
 	}
 
 	if (sf & SYSC_HAS_MIDLEMODE) {
-		if (oh->flags & HWMOD_SWSUP_MSTANDBY) {
+		if ((oh->flags & HWMOD_SWSUP_MSTANDBY) ||
+		    (oh->flags & HWMOD_FORCE_MSTANDBY)) {
 			idlemode = HWMOD_IDLEMODE_FORCE;
 		} else {
 			if (sf & SYSC_HAS_ENAWAKEUP)
@@ -1661,7 +1665,7 @@ static int _deassert_hardreset(struct omap_hwmod *oh, const char *name)
 		return -ENOSYS;
 
 	ret = _lookup_hardreset(oh, name, &ohri);
-	if (IS_ERR_VALUE(ret))
+	if (ret < 0)
 		return ret;
 
 	if (oh->clkdm) {
@@ -2053,6 +2057,23 @@ static int _omap4_get_context_lost(struct omap_hwmod *oh)
 }
 
 /**
+ * _enable_preprogram - Pre-program an IP block during the _enable() process
+ * @oh: struct omap_hwmod *
+ *
+ * Some IP blocks (such as AESS) require some additional programming
+ * after enable before they can enter idle.  If a function pointer to
+ * do so is present in the hwmod data, then call it and pass along the
+ * return value; otherwise, return 0.
+ */
+static int __init _enable_preprogram(struct omap_hwmod *oh)
+{
+	if (!oh->class->enable_preprogram)
+		return 0;
+
+	return oh->class->enable_preprogram(oh);
+}
+
+/**
  * _enable - enable an omap_hwmod
  * @oh: struct omap_hwmod *
  *
@@ -2134,6 +2155,8 @@ static int _enable(struct omap_hwmod *oh)
 	_enable_clocks(oh);
 	if (soc_ops.enable_module)
 		soc_ops.enable_module(oh);
+	if (oh->flags & HWMOD_BLOCK_WFI)
+		cpu_idle_poll_ctrl(true);
 
 	if (soc_ops.update_context_lost)
 		soc_ops.update_context_lost(oh);
@@ -2156,6 +2179,7 @@ static int _enable(struct omap_hwmod *oh)
 				_update_sysc_cache(oh);
 			_enable_sysc(oh);
 		}
+		r = _enable_preprogram(oh);
 	} else {
 		if (soc_ops.disable_module)
 			soc_ops.disable_module(oh);
@@ -2195,6 +2219,8 @@ static int _idle(struct omap_hwmod *oh)
 		_idle_sysc(oh);
 	_del_initiator_dep(oh, mpu_oh);
 
+	if (oh->flags & HWMOD_BLOCK_WFI)
+		cpu_idle_poll_ctrl(false);
 	if (soc_ops.disable_module)
 		soc_ops.disable_module(oh);
 
@@ -2303,6 +2329,8 @@ static int _shutdown(struct omap_hwmod *oh)
 	if (oh->_state == _HWMOD_STATE_ENABLED) {
 		_del_initiator_dep(oh, mpu_oh);
 		/* XXX what about the other system initiators here? dma, dsp */
+		if (oh->flags & HWMOD_BLOCK_WFI)
+			cpu_idle_poll_ctrl(false);
 		if (soc_ops.disable_module)
 			soc_ops.disable_module(oh);
 		_disable_clocks(oh);
@@ -2324,6 +2352,34 @@ static int _shutdown(struct omap_hwmod *oh)
 }
 
 /**
+ * of_dev_hwmod_lookup - look up needed hwmod from dt blob
+ * @np: struct device_node *
+ * @oh: struct omap_hwmod *
+ *
+ * Parse the dt blob and find out needed hwmod. Recursive function is
+ * implemented to take care hierarchical dt blob parsing.
+ * Return: The device node on success or NULL on failure.
+ */
+static struct device_node *of_dev_hwmod_lookup(struct device_node *np,
+						struct omap_hwmod *oh)
+{
+	struct device_node *np0 = NULL, *np1 = NULL;
+	const char *p;
+
+	for_each_child_of_node(np, np0) {
+		if (of_find_property(np0, "ti,hwmods", NULL)) {
+			p = of_get_property(np0, "ti,hwmods", NULL);
+			if (!strcmp(p, oh->name))
+				return np0;
+			np1 = of_dev_hwmod_lookup(np0, oh);
+			if (np1)
+				return np1;
+		}
+	}
+	return NULL;
+}
+
+/**
  * _init_mpu_rt_base - populate the virtual address for a hwmod
  * @oh: struct omap_hwmod * to locate the virtual address
  *
@@ -2335,7 +2391,8 @@ static int _shutdown(struct omap_hwmod *oh)
 static void __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 {
 	struct omap_hwmod_addr_space *mem;
-	void __iomem *va_start;
+	void __iomem *va_start = NULL;
+	struct device_node *np;
 
 	if (!oh)
 		return;
@@ -2349,10 +2406,18 @@ static void __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 	if (!mem) {
 		pr_debug("omap_hwmod: %s: no MPU register target found\n",
 			 oh->name);
-		return;
+
+		/* Extract the IO space from device tree blob */
+		if (!of_have_populated_dt())
+			return;
+
+		np = of_dev_hwmod_lookup(of_find_node_by_name(NULL, "ocp"), oh);
+		if (np)
+			va_start = of_iomap(np, 0);
+	} else {
+		va_start = ioremap(mem->pa_start, mem->pa_end - mem->pa_start);
 	}
 
-	va_start = ioremap(mem->pa_start, mem->pa_end - mem->pa_start);
 	if (!va_start) {
 		pr_err("omap_hwmod: %s: Could not ioremap\n", oh->name);
 		return;
@@ -2384,10 +2449,11 @@ static int __init _init(struct omap_hwmod *oh, void *data)
 	if (oh->_state != _HWMOD_STATE_REGISTERED)
 		return 0;
 
-	_init_mpu_rt_base(oh, NULL);
+	if (oh->class->sysc)
+		_init_mpu_rt_base(oh, NULL);
 
 	r = _init_clocks(oh, NULL);
-	if (IS_ERR_VALUE(r)) {
+	if (r < 0) {
 		WARN(1, "omap_hwmod: %s: couldn't init clocks\n", oh->name);
 		return -EINVAL;
 	}
@@ -3041,11 +3107,8 @@ static int _am33xx_assert_hardreset(struct omap_hwmod *oh,
 static int _am33xx_deassert_hardreset(struct omap_hwmod *oh,
 				     struct omap_hwmod_rst_info *ohri)
 {
-	if (ohri->st_shift)
-		pr_err("omap_hwmod: %s: %s: hwmod data error: OMAP4 does not support st_shift\n",
-		       oh->name, ohri->name);
-
 	return am33xx_prm_deassert_hardreset(ohri->rst_shift,
+				ohri->st_shift,
 				oh->clkdm->pwrdm.ptr->prcm_offs,
 				oh->prcm.omap4.rstctrl_offs,
 				oh->prcm.omap4.rstst_offs);
@@ -3303,7 +3366,7 @@ static int __init omap_hwmod_setup_all(void)
 
 	return 0;
 }
-core_initcall(omap_hwmod_setup_all);
+omap_core_initcall(omap_hwmod_setup_all);
 
 /**
  * omap_hwmod_enable - enable an omap_hwmod

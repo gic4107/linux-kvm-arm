@@ -63,6 +63,7 @@ struct platform_device *__init imx_add_flexcan(
 
 #include <linux/fsl_devices.h>
 struct imx_fsl_usb2_udc_data {
+	const char *devid;
 	resource_size_t iobase;
 	resource_size_t irq;
 };
@@ -343,13 +344,3 @@ struct platform_device *imx_add_imx_dma(char *name, resource_size_t iobase,
 					int irq, int irq_err);
 struct platform_device *imx_add_imx_sdma(char *name,
 	resource_size_t iobase, int irq, struct sdma_platform_data *pdata);
-
-#include <linux/ahci_platform.h>
-struct imx_ahci_imx_data {
-	const char *devid;
-	resource_size_t iobase;
-	resource_size_t irq;
-};
-struct platform_device *__init imx_add_ahci_imx(
-		const struct imx_ahci_imx_data *data,
-		const struct ahci_platform_data *pdata);

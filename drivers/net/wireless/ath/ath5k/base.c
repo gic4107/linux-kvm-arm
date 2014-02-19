@@ -240,13 +240,14 @@ static const struct ath_ops ath5k_common_ops = {
 * Driver Initialization *
 \***********************/
 
-static int ath5k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
+static void ath5k_reg_notifier(struct wiphy *wiphy,
+			       struct regulatory_request *request)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct ath5k_hw *ah = hw->priv;
 	struct ath_regulatory *regulatory = ath5k_hw_regulatory(ah);
 
-	return ath_reg_notifier_apply(wiphy, request, regulatory);
+	ath_reg_notifier_apply(wiphy, request, regulatory);
 }
 
 /********************\
@@ -2638,7 +2639,7 @@ int ath5k_start(struct ieee80211_hw *hw)
 	 * be followed by initialization of the appropriate bits
 	 * and then setup of the interrupt mask.
 	 */
-	ah->curchan = ah->hw->conf.channel;
+	ah->curchan = ah->hw->conf.chandef.chan;
 	ah->imask = AR5K_INT_RXOK
 		| AR5K_INT_RXERR
 		| AR5K_INT_RXEOL

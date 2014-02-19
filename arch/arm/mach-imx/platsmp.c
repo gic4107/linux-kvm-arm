@@ -14,11 +14,12 @@
 #include <linux/smp.h>
 #include <asm/page.h>
 #include <asm/smp_scu.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach/map.h>
 
 #include "common.h"
 #include "hardware.h"
+
+#define SCU_STANDBY_ENABLE	(1 << 5)
 
 static void __iomem *scu_base;
 
@@ -42,14 +43,12 @@ void __init imx_scu_map_io(void)
 	scu_base = IMX_IO_ADDRESS(base);
 }
 
-static void __cpuinit imx_secondary_init(unsigned int cpu)
+void imx_scu_standby_enable(void)
 {
-	/*
-	 * if any interrupts are already enabled for the primary
-	 * core (e.g. timer irq), then they will not have been enabled
-	 * for us: do so
-	 */
-	gic_secondary_init(0);
+	u32 val = readl_relaxed(scu_base);
+
+	val |= SCU_STANDBY_ENABLE;
+	writel_relaxed(val, scu_base);
 }
 
 static int __cpuinit imx_boot_secondary(unsigned int cpu, struct task_struct *idle)
@@ -69,10 +68,8 @@ static void __init imx_smp_init_cpus(void)
 
 	ncores = scu_get_core_count(scu_base);
 
-	for (i = 0; i < ncores; i++)
-		set_cpu_possible(i, true);
-
-	set_smp_cross_call(gic_raise_softirq);
+	for (i = ncores; i < NR_CPUS; i++)
+		set_cpu_possible(i, false);
 }
 
 void imx_smp_prepare(void)
@@ -88,9 +85,9 @@ static void __init imx_smp_prepare_cpus(unsigned int max_cpus)
 struct smp_operations  imx_smp_ops __initdata = {
 	.smp_init_cpus		= imx_smp_init_cpus,
 	.smp_prepare_cpus	= imx_smp_prepare_cpus,
-	.smp_secondary_init	= imx_secondary_init,
 	.smp_boot_secondary	= imx_boot_secondary,
 #ifdef CONFIG_HOTPLUG_CPU
 	.cpu_die		= imx_cpu_die,
+	.cpu_kill		= imx_cpu_kill,
 #endif
 };

@@ -47,6 +47,9 @@
 #define get_ipp_context(dev)	platform_get_drvdata(to_platform_device(dev))
 #define ipp_is_m2m_cmd(c)	(c == IPP_CMD_M2M)
 
+/* platform device pointer for ipp device. */
+static struct platform_device *exynos_drm_ipp_pdev;
+
 /*
  * A structure of event.
  *
@@ -102,6 +105,30 @@ static LIST_HEAD(exynos_drm_ippdrv_list);
 static DEFINE_MUTEX(exynos_drm_ippdrv_lock);
 static BLOCKING_NOTIFIER_HEAD(exynos_drm_ippnb_list);
 
+int exynos_platform_device_ipp_register(void)
+{
+	struct platform_device *pdev;
+
+	if (exynos_drm_ipp_pdev)
+		return -EEXIST;
+
+	pdev = platform_device_register_simple("exynos-drm-ipp", -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	exynos_drm_ipp_pdev = pdev;
+
+	return 0;
+}
+
+void exynos_platform_device_ipp_unregister(void)
+{
+	if (exynos_drm_ipp_pdev) {
+		platform_device_unregister(exynos_drm_ipp_pdev);
+		exynos_drm_ipp_pdev = NULL;
+	}
+}
+
 int exynos_drm_ippdrv_register(struct exynos_drm_ippdrv *ippdrv)
 {
 	DRM_DEBUG_KMS("%s\n", __func__);
@@ -137,21 +164,15 @@ static int ipp_create_id(struct idr *id_idr, struct mutex *lock, void *obj,
 
 	DRM_DEBUG_KMS("%s\n", __func__);
 
-again:
-	/* ensure there is space available to allocate a handle */
-	if (idr_pre_get(id_idr, GFP_KERNEL) == 0) {
-		DRM_ERROR("failed to get idr.\n");
-		return -ENOMEM;
-	}
-
 	/* do the allocation under our mutexlock */
 	mutex_lock(lock);
-	ret = idr_get_new_above(id_idr, obj, 1, (int *)idp);
+	ret = idr_alloc(id_idr, obj, 1, 0, GFP_KERNEL);
 	mutex_unlock(lock);
-	if (ret == -EAGAIN)
-		goto again;
+	if (ret < 0)
+		return ret;
 
-	return ret;
+	*idp = ret;
+	return 0;
 }
 
 static void *ipp_find_obj(struct idr *id_idr, struct mutex *lock, u32 id)
@@ -869,7 +890,7 @@ static void ipp_put_event(struct drm_exynos_ipp_cmd_node *c_node,
 	}
 }
 
-void ipp_handle_cmd_work(struct device *dev,
+static void ipp_handle_cmd_work(struct device *dev,
 		struct exynos_drm_ippdrv *ippdrv,
 		struct drm_exynos_ipp_cmd_work *cmd_work,
 		struct drm_exynos_ipp_cmd_node *c_node)
@@ -1786,8 +1807,6 @@ err_iommu:
 			drm_iommu_detach_device(drm_dev, ippdrv->dev);
 
 err_idr:
-	idr_remove_all(&ctx->ipp_idr);
-	idr_remove_all(&ctx->prop_idr);
 	idr_destroy(&ctx->ipp_idr);
 	idr_destroy(&ctx->prop_idr);
 	return ret;
@@ -1965,8 +1984,6 @@ static int ipp_remove(struct platform_device *pdev)
 	exynos_drm_subdrv_unregister(&ctx->subdrv);
 
 	/* remove,destroy ipp idr */
-	idr_remove_all(&ctx->ipp_idr);
-	idr_remove_all(&ctx->prop_idr);
 	idr_destroy(&ctx->ipp_idr);
 	idr_destroy(&ctx->prop_idr);
 

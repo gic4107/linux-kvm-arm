@@ -19,6 +19,11 @@
 #include <asm/firmware.h>
 #include <asm/ptrace.h>
 
+#define BHRB_MAX_ENTRIES	32
+#define BHRB_TARGET		0x0000000000000002
+#define BHRB_PREDICTION		0x0000000000000001
+#define BHRB_EA			0xFFFFFFFFFFFFFFFC
+
 struct cpu_hw_events {
 	int n_events;
 	int n_percpu;
@@ -38,7 +43,15 @@ struct cpu_hw_events {
 
 	unsigned int group_flag;
 	int n_txn_start;
+
+	/* BHRB bits */
+	u64				bhrb_filter;	/* BHRB HW branch filter */
+	int				bhrb_users;
+	void				*bhrb_context;
+	struct	perf_branch_stack	bhrb_stack;
+	struct	perf_branch_entry	bhrb_entries[BHRB_MAX_ENTRIES];
 };
+
 DEFINE_PER_CPU(struct cpu_hw_events, cpu_hw_events);
 
 struct power_pmu *ppmu;
@@ -89,6 +102,11 @@ static inline int siar_valid(struct pt_regs *regs)
 
 #endif /* CONFIG_PPC32 */
 
+static bool regs_use_siar(struct pt_regs *regs)
+{
+	return !!(regs->result & 1);
+}
+
 /*
  * Things that are specific to 64-bit implementations.
  */
@@ -98,11 +116,12 @@ static inline unsigned long perf_ip_adjust(struct pt_regs *regs)
 {
 	unsigned long mmcra = regs->dsisr;
 
-	if ((mmcra & MMCRA_SAMPLE_ENABLE) && !(ppmu->flags & PPMU_ALT_SIPR)) {
+	if ((ppmu->flags & PPMU_HAS_SSLOT) && (mmcra & MMCRA_SAMPLE_ENABLE)) {
 		unsigned long slot = (mmcra & MMCRA_SLOT) >> MMCRA_SLOT_SHIFT;
 		if (slot > 1)
 			return 4 * (slot - 1);
 	}
+
 	return 0;
 }
 
@@ -130,24 +149,35 @@ static inline void perf_get_data_addr(struct pt_regs *regs, u64 *addrp)
 		*addrp = mfspr(SPRN_SDAR);
 }
 
-static bool mmcra_sihv(unsigned long mmcra)
+static bool regs_sihv(struct pt_regs *regs)
 {
 	unsigned long sihv = MMCRA_SIHV;
+
+	if (ppmu->flags & PPMU_HAS_SIER)
+		return !!(regs->dar & SIER_SIHV);
 
 	if (ppmu->flags & PPMU_ALT_SIPR)
 		sihv = POWER6_MMCRA_SIHV;
 
-	return !!(mmcra & sihv);
+	return !!(regs->dsisr & sihv);
 }
 
-static bool mmcra_sipr(unsigned long mmcra)
+static bool regs_sipr(struct pt_regs *regs)
 {
 	unsigned long sipr = MMCRA_SIPR;
+
+	if (ppmu->flags & PPMU_HAS_SIER)
+		return !!(regs->dar & SIER_SIPR);
 
 	if (ppmu->flags & PPMU_ALT_SIPR)
 		sipr = POWER6_MMCRA_SIPR;
 
-	return !!(mmcra & sipr);
+	return !!(regs->dsisr & sipr);
+}
+
+static bool regs_no_sipr(struct pt_regs *regs)
+{
+	return !!(regs->result & 2);
 }
 
 static inline u32 perf_flags_from_msr(struct pt_regs *regs)
@@ -161,8 +191,7 @@ static inline u32 perf_flags_from_msr(struct pt_regs *regs)
 
 static inline u32 perf_get_misc_flags(struct pt_regs *regs)
 {
-	unsigned long mmcra = regs->dsisr;
-	unsigned long use_siar = regs->result;
+	bool use_siar = regs_use_siar(regs);
 
 	if (!use_siar)
 		return perf_flags_from_msr(regs);
@@ -173,7 +202,7 @@ static inline u32 perf_get_misc_flags(struct pt_regs *regs)
 	 * SIAR which should give slightly more reliable
 	 * results
 	 */
-	if (ppmu->flags & PPMU_NO_SIPR) {
+	if (regs_no_sipr(regs)) {
 		unsigned long siar = mfspr(SPRN_SIAR);
 		if (siar >= PAGE_OFFSET)
 			return PERF_RECORD_MISC_KERNEL;
@@ -181,16 +210,19 @@ static inline u32 perf_get_misc_flags(struct pt_regs *regs)
 	}
 
 	/* PR has priority over HV, so order below is important */
-	if (mmcra_sipr(mmcra))
+	if (regs_sipr(regs))
 		return PERF_RECORD_MISC_USER;
-	if (mmcra_sihv(mmcra) && (freeze_events_kernel != MMCR0_FCHV))
+
+	if (regs_sihv(regs) && (freeze_events_kernel != MMCR0_FCHV))
 		return PERF_RECORD_MISC_HYPERVISOR;
+
 	return PERF_RECORD_MISC_KERNEL;
 }
 
 /*
  * Overload regs->dsisr to store MMCRA so we only need to read it once
  * on each interrupt.
+ * Overload regs->dar to store SIER if we have it.
  * Overload regs->result to specify whether we should use the MSR (result
  * is zero) or the SIAR (result is non zero).
  */
@@ -199,6 +231,24 @@ static inline void perf_read_regs(struct pt_regs *regs)
 	unsigned long mmcra = mfspr(SPRN_MMCRA);
 	int marked = mmcra & MMCRA_SAMPLE_ENABLE;
 	int use_siar;
+
+	regs->dsisr = mmcra;
+	regs->result = 0;
+
+	if (ppmu->flags & PPMU_NO_SIPR)
+		regs->result |= 2;
+
+	/*
+	 * On power8 if we're in random sampling mode, the SIER is updated.
+	 * If we're in continuous sampling mode, we don't have SIPR.
+	 */
+	if (ppmu->flags & PPMU_HAS_SIER) {
+		if (marked)
+			regs->dar = mfspr(SPRN_SIER);
+		else
+			regs->result |= 2;
+	}
+
 
 	/*
 	 * If this isn't a PMU exception (eg a software event) the SIAR is
@@ -223,13 +273,12 @@ static inline void perf_read_regs(struct pt_regs *regs)
 		use_siar = 1;
 	else if ((ppmu->flags & PPMU_NO_CONT_SAMPLING))
 		use_siar = 0;
-	else if (!(ppmu->flags & PPMU_NO_SIPR) && mmcra_sipr(mmcra))
+	else if (!regs_no_sipr(regs) && regs_sipr(regs))
 		use_siar = 0;
 	else
 		use_siar = 1;
 
-	regs->dsisr = mmcra;
-	regs->result = use_siar;
+	regs->result |= use_siar;
 }
 
 /*
@@ -822,6 +871,9 @@ static void power_pmu_enable(struct pmu *pmu)
 	}
 
  out:
+	if (cpuhw->bhrb_users)
+		ppmu->config_bhrb(cpuhw->bhrb_filter);
+
 	local_irq_restore(flags);
 }
 
@@ -852,6 +904,47 @@ static int collect_events(struct perf_event *group, int max_count,
 	return n;
 }
 
+/* Reset all possible BHRB entries */
+static void power_pmu_bhrb_reset(void)
+{
+	asm volatile(PPC_CLRBHRB);
+}
+
+void power_pmu_bhrb_enable(struct perf_event *event)
+{
+	struct cpu_hw_events *cpuhw = &__get_cpu_var(cpu_hw_events);
+
+	if (!ppmu->bhrb_nr)
+		return;
+
+	/* Clear BHRB if we changed task context to avoid data leaks */
+	if (event->ctx->task && cpuhw->bhrb_context != event->ctx) {
+		power_pmu_bhrb_reset();
+		cpuhw->bhrb_context = event->ctx;
+	}
+	cpuhw->bhrb_users++;
+}
+
+void power_pmu_bhrb_disable(struct perf_event *event)
+{
+	struct cpu_hw_events *cpuhw = &__get_cpu_var(cpu_hw_events);
+
+	if (!ppmu->bhrb_nr)
+		return;
+
+	cpuhw->bhrb_users--;
+	WARN_ON_ONCE(cpuhw->bhrb_users < 0);
+
+	if (!cpuhw->disabled && !cpuhw->bhrb_users) {
+		/* BHRB cannot be turned off when other
+		 * events are active on the PMU.
+		 */
+
+		/* avoid stale pointer */
+		cpuhw->bhrb_context = NULL;
+	}
+}
+
 /*
  * Add a event to the PMU.
  * If all events are not already frozen, then we disable and
@@ -880,8 +973,16 @@ static int power_pmu_add(struct perf_event *event, int ef_flags)
 	cpuhw->events[n0] = event->hw.config;
 	cpuhw->flags[n0] = event->hw.event_base;
 
+	/*
+	 * This event may have been disabled/stopped in record_and_restart()
+	 * because we exceeded the ->event_limit. If re-starting the event,
+	 * clear the ->hw.state (STOPPED and UPTODATE flags), so the user
+	 * notification is re-enabled.
+	 */
 	if (!(ef_flags & PERF_EF_START))
 		event->hw.state = PERF_HES_STOPPED | PERF_HES_UPTODATE;
+	else
+		event->hw.state = 0;
 
 	/*
 	 * If group events scheduling transaction was started,
@@ -903,6 +1004,9 @@ nocheck:
 
 	ret = 0;
  out:
+	if (has_branch_stack(event))
+		power_pmu_bhrb_enable(event);
+
 	perf_pmu_enable(event->pmu);
 	local_irq_restore(flags);
 	return ret;
@@ -954,6 +1058,9 @@ static void power_pmu_del(struct perf_event *event, int ef_flags)
 		/* disable exceptions if no events are running */
 		cpuhw->mmcr[0] &= ~(MMCR0_PMXE | MMCR0_FCECE);
 	}
+
+	if (has_branch_stack(event))
+		power_pmu_bhrb_disable(event);
 
 	perf_pmu_enable(event->pmu);
 	local_irq_restore(flags);
@@ -1073,6 +1180,15 @@ int power_pmu_commit_txn(struct pmu *pmu)
 	return 0;
 }
 
+/* Called from ctxsw to prevent one process's branch entries to
+ * mingle with the other process's entries during context switch.
+ */
+void power_pmu_flush_branch_stack(void)
+{
+	if (ppmu->bhrb_nr)
+		power_pmu_bhrb_reset();
+}
+
 /*
  * Return 1 if we might be able to put event on a limited PMC,
  * or 0 if not.
@@ -1187,9 +1303,11 @@ static int power_pmu_event_init(struct perf_event *event)
 	if (!ppmu)
 		return -ENOENT;
 
-	/* does not support taken branch sampling */
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
+	if (has_branch_stack(event)) {
+	        /* PMU has BHRB enabled */
+		if (!(ppmu->flags & PPMU_BHRB))
+			return -EOPNOTSUPP;
+	}
 
 	switch (event->attr.type) {
 	case PERF_TYPE_HARDWARE:
@@ -1270,6 +1388,15 @@ static int power_pmu_event_init(struct perf_event *event)
 
 	cpuhw = &get_cpu_var(cpu_hw_events);
 	err = power_check_constraints(cpuhw, events, cflags, n + 1);
+
+	if (has_branch_stack(event)) {
+		cpuhw->bhrb_filter = ppmu->bhrb_filter_map(
+					event->attr.branch_sample_type);
+
+		if(cpuhw->bhrb_filter == -1)
+			return -EOPNOTSUPP;
+	}
+
 	put_cpu_var(cpu_hw_events);
 	if (err)
 		return -EINVAL;
@@ -1305,6 +1432,16 @@ static int power_pmu_event_idx(struct perf_event *event)
 	return event->hw.idx;
 }
 
+ssize_t power_events_sysfs_show(struct device *dev,
+				struct device_attribute *attr, char *page)
+{
+	struct perf_pmu_events_attr *pmu_attr;
+
+	pmu_attr = container_of(attr, struct perf_pmu_events_attr, attr);
+
+	return sprintf(page, "event=0x%02llx\n", pmu_attr->id);
+}
+
 struct pmu power_pmu = {
 	.pmu_enable	= power_pmu_enable,
 	.pmu_disable	= power_pmu_disable,
@@ -1318,8 +1455,79 @@ struct pmu power_pmu = {
 	.cancel_txn	= power_pmu_cancel_txn,
 	.commit_txn	= power_pmu_commit_txn,
 	.event_idx	= power_pmu_event_idx,
+	.flush_branch_stack = power_pmu_flush_branch_stack,
 };
 
+/* Processing BHRB entries */
+void power_pmu_bhrb_read(struct cpu_hw_events *cpuhw)
+{
+	u64 val;
+	u64 addr;
+	int r_index, u_index, target, pred;
+
+	r_index = 0;
+	u_index = 0;
+	while (r_index < ppmu->bhrb_nr) {
+		/* Assembly read function */
+		val = read_bhrb(r_index);
+
+		/* Terminal marker: End of valid BHRB entries */
+		if (val == 0) {
+			break;
+		} else {
+			/* BHRB field break up */
+			addr = val & BHRB_EA;
+			pred = val & BHRB_PREDICTION;
+			target = val & BHRB_TARGET;
+
+			/* Probable Missed entry: Not applicable for POWER8 */
+			if ((addr == 0) && (target == 0) && (pred == 1)) {
+				r_index++;
+				continue;
+			}
+
+			/* Real Missed entry: Power8 based missed entry */
+			if ((addr == 0) && (target == 1) && (pred == 1)) {
+				r_index++;
+				continue;
+			}
+
+			/* Reserved condition: Not a valid entry  */
+			if ((addr == 0) && (target == 1) && (pred == 0)) {
+				r_index++;
+				continue;
+			}
+
+			/* Is a target address */
+			if (val & BHRB_TARGET) {
+				/* First address cannot be a target address */
+				if (r_index == 0) {
+					r_index++;
+					continue;
+				}
+
+				/* Update target address for the previous entry */
+				cpuhw->bhrb_entries[u_index - 1].to = addr;
+				cpuhw->bhrb_entries[u_index - 1].mispred = pred;
+				cpuhw->bhrb_entries[u_index - 1].predicted = ~pred;
+
+				/* Dont increment u_index */
+				r_index++;
+			} else {
+				/* Update address, flags for current entry */
+				cpuhw->bhrb_entries[u_index].from = addr;
+				cpuhw->bhrb_entries[u_index].mispred = pred;
+				cpuhw->bhrb_entries[u_index].predicted = ~pred;
+
+				/* Successfully popullated one entry */
+				u_index++;
+				r_index++;
+			}
+		}
+	}
+	cpuhw->bhrb_stack.nr = u_index;
+	return;
+}
 
 /*
  * A counter has overflowed; update its count and record
@@ -1349,6 +1557,8 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 	 */
 	val = 0;
 	left = local64_read(&event->hw.period_left) - delta;
+	if (delta == 0)
+		left++;
 	if (period) {
 		if (left <= 0) {
 			left += period;
@@ -1377,6 +1587,13 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 		if (event->attr.sample_type & PERF_SAMPLE_ADDR)
 			perf_get_data_addr(regs, &data.addr);
 
+		if (event->attr.sample_type & PERF_SAMPLE_BRANCH_STACK) {
+			struct cpu_hw_events *cpuhw;
+			cpuhw = &__get_cpu_var(cpu_hw_events);
+			power_pmu_bhrb_read(cpuhw);
+			data.br_stack = &cpuhw->bhrb_stack;
+		}
+
 		if (perf_event_overflow(event, &data, regs))
 			power_pmu_stop(event, 0);
 	}
@@ -1402,7 +1619,7 @@ unsigned long perf_misc_flags(struct pt_regs *regs)
  */
 unsigned long perf_instruction_pointer(struct pt_regs *regs)
 {
-	unsigned long use_siar = regs->result;
+	bool use_siar = regs_use_siar(regs);
 
 	if (use_siar && siar_valid(regs))
 		return mfspr(SPRN_SIAR) + perf_ip_adjust(regs);
@@ -1412,11 +1629,8 @@ unsigned long perf_instruction_pointer(struct pt_regs *regs)
 		return regs->nip;
 }
 
-static bool pmc_overflow(unsigned long val)
+static bool pmc_overflow_power7(unsigned long val)
 {
-	if ((int)val < 0)
-		return true;
-
 	/*
 	 * Events on POWER7 can roll back if a speculative event doesn't
 	 * eventually complete. Unfortunately in some rare cases they will
@@ -1428,7 +1642,15 @@ static bool pmc_overflow(unsigned long val)
 	 * PMCs because a user might set a period of less than 256 and we
 	 * don't want to mistakenly reset them.
 	 */
-	if (pvr_version_is(PVR_POWER7) && ((0x80000000 - val) <= 256))
+	if ((0x80000000 - val) <= 256)
+		return true;
+
+	return false;
+}
+
+static bool pmc_overflow(unsigned long val)
+{
+	if ((int)val < 0)
 		return true;
 
 	return false;
@@ -1439,11 +1661,11 @@ static bool pmc_overflow(unsigned long val)
  */
 static void perf_event_interrupt(struct pt_regs *regs)
 {
-	int i;
+	int i, j;
 	struct cpu_hw_events *cpuhw = &__get_cpu_var(cpu_hw_events);
 	struct perf_event *event;
-	unsigned long val;
-	int found = 0;
+	unsigned long val[8];
+	int found, active;
 	int nmi;
 
 	if (cpuhw->n_limited)
@@ -1458,33 +1680,53 @@ static void perf_event_interrupt(struct pt_regs *regs)
 	else
 		irq_enter();
 
-	for (i = 0; i < cpuhw->n_events; ++i) {
-		event = cpuhw->event[i];
-		if (!event->hw.idx || is_limited_pmc(event->hw.idx))
-			continue;
-		val = read_pmc(event->hw.idx);
-		if ((int)val < 0) {
-			/* event has overflowed */
-			found = 1;
-			record_and_restart(event, val, regs);
-		}
-	}
+	/* Read all the PMCs since we'll need them a bunch of times */
+	for (i = 0; i < ppmu->n_counter; ++i)
+		val[i] = read_pmc(i + 1);
 
-	/*
-	 * In case we didn't find and reset the event that caused
-	 * the interrupt, scan all events and reset any that are
-	 * negative, to avoid getting continual interrupts.
-	 * Any that we processed in the previous loop will not be negative.
-	 */
-	if (!found) {
-		for (i = 0; i < ppmu->n_counter; ++i) {
-			if (is_limited_pmc(i + 1))
+	/* Try to find what caused the IRQ */
+	found = 0;
+	for (i = 0; i < ppmu->n_counter; ++i) {
+		if (!pmc_overflow(val[i]))
+			continue;
+		if (is_limited_pmc(i + 1))
+			continue; /* these won't generate IRQs */
+		/*
+		 * We've found one that's overflowed.  For active
+		 * counters we need to log this.  For inactive
+		 * counters, we need to reset it anyway
+		 */
+		found = 1;
+		active = 0;
+		for (j = 0; j < cpuhw->n_events; ++j) {
+			event = cpuhw->event[j];
+			if (event->hw.idx == (i + 1)) {
+				active = 1;
+				record_and_restart(event, val[i], regs);
+				break;
+			}
+		}
+		if (!active)
+			/* reset non active counters that have overflowed */
+			write_pmc(i + 1, 0);
+	}
+	if (!found && pvr_version_is(PVR_POWER7)) {
+		/* check active counters for special buggy p7 overflow */
+		for (i = 0; i < cpuhw->n_events; ++i) {
+			event = cpuhw->event[i];
+			if (!event->hw.idx || is_limited_pmc(event->hw.idx))
 				continue;
-			val = read_pmc(i + 1);
-			if (pmc_overflow(val))
-				write_pmc(i + 1, 0);
+			if (pmc_overflow_power7(val[event->hw.idx - 1])) {
+				/* event has overflowed in a buggy way*/
+				found = 1;
+				record_and_restart(event,
+						   val[event->hw.idx - 1],
+						   regs);
+			}
 		}
 	}
+	if ((!found) && printk_ratelimit())
+		printk(KERN_WARNING "Can't find PMC that caused IRQ\n");
 
 	/*
 	 * Reset MMCR0 to its normal value.  This will set PMXE and
@@ -1536,6 +1778,8 @@ int __cpuinit register_power_pmu(struct power_pmu *pmu)
 	ppmu = pmu;
 	pr_info("%s performance monitor hardware support registered\n",
 		pmu->name);
+
+	power_pmu.attr_groups = ppmu->attr_groups;
 
 #ifdef MSR_HV
 	/*

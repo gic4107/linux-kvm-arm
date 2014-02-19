@@ -26,6 +26,7 @@ struct extent_map {
 	u64 mod_len;
 	u64 orig_start;
 	u64 orig_block_len;
+	u64 ram_bytes;
 	u64 block_start;
 	u64 block_len;
 	u64 generation;
@@ -61,7 +62,7 @@ void extent_map_tree_init(struct extent_map_tree *tree);
 struct extent_map *lookup_extent_mapping(struct extent_map_tree *tree,
 					 u64 start, u64 len);
 int add_extent_mapping(struct extent_map_tree *tree,
-		       struct extent_map *em);
+		       struct extent_map *em, int modified);
 int remove_extent_mapping(struct extent_map_tree *tree, struct extent_map *em);
 
 struct extent_map *alloc_extent_map(void);
@@ -69,6 +70,7 @@ void free_extent_map(struct extent_map *em);
 int __init extent_map_init(void);
 void extent_map_exit(void);
 int unpin_extent_cache(struct extent_map_tree *tree, u64 start, u64 len, u64 gen);
+void clear_em_logging(struct extent_map_tree *tree, struct extent_map *em);
 struct extent_map *search_extent_mapping(struct extent_map_tree *tree,
 					 u64 start, u64 len);
 #endif

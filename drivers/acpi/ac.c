@@ -60,7 +60,7 @@ static int acpi_ac_open_fs(struct inode *inode, struct file *file);
 #endif
 
 static int acpi_ac_add(struct acpi_device *device);
-static int acpi_ac_remove(struct acpi_device *device, int type);
+static int acpi_ac_remove(struct acpi_device *device);
 static void acpi_ac_notify(struct acpi_device *device, u32 event);
 
 static const struct acpi_device_id ac_device_ids[] = {
@@ -194,7 +194,7 @@ static int acpi_ac_seq_show(struct seq_file *seq, void *offset)
 
 static int acpi_ac_open_fs(struct inode *inode, struct file *file)
 {
-	return single_open(file, acpi_ac_seq_show, PDE(inode)->data);
+	return single_open(file, acpi_ac_seq_show, PDE_DATA(inode));
 }
 
 static int acpi_ac_add_fs(struct acpi_device *device)
@@ -337,7 +337,7 @@ static int acpi_ac_resume(struct device *dev)
 }
 #endif
 
-static int acpi_ac_remove(struct acpi_device *device, int type)
+static int acpi_ac_remove(struct acpi_device *device)
 {
 	struct acpi_ac *ac = NULL;
 

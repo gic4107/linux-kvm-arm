@@ -6,6 +6,7 @@
 
 #include <linux/sched.h>
 #include <linux/pci.h>
+#include <linux/pci-acpi.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/dmi.h>
@@ -34,7 +35,6 @@ int noioapicreroute = 1;
 #endif
 int pcibios_last_bus = -1;
 unsigned long pirq_table_addr;
-struct pci_bus *pci_root_bus;
 const struct pci_raw_ops *__read_mostly raw_pci_ops;
 const struct pci_raw_ops *__read_mostly raw_pci_ext_ops;
 
@@ -169,6 +169,16 @@ void pcibios_fixup_bus(struct pci_bus *b)
 	pci_read_bridge_bases(b);
 	list_for_each_entry(dev, &b->devices, bus_list)
 		pcibios_fixup_device_resources(dev);
+}
+
+void pcibios_add_bus(struct pci_bus *bus)
+{
+	acpi_pci_add_bus(bus);
+}
+
+void pcibios_remove_bus(struct pci_bus *bus)
+{
+	acpi_pci_remove_bus(bus);
 }
 
 /*

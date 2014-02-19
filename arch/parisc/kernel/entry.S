@@ -400,7 +400,15 @@
 #if PT_NLEVELS == 3
 	extru		\va,31-ASM_PMD_SHIFT,ASM_BITS_PER_PMD,\index
 #else
+# if defined(CONFIG_64BIT)
+	extrd,u		\va,63-ASM_PGDIR_SHIFT,ASM_BITS_PER_PGD,\index
+  #else
+  # if PAGE_SIZE > 4096
+	extru		\va,31-ASM_PGDIR_SHIFT,32-ASM_PGDIR_SHIFT,\index
+  # else
 	extru		\va,31-ASM_PGDIR_SHIFT,ASM_BITS_PER_PGD,\index
+  # endif
+# endif
 #endif
 	dep             %r0,31,PAGE_SHIFT,\pmd  /* clear offset */
 	copy		%r0,\pte
@@ -483,7 +491,7 @@
 	 * B <-> _PAGE_DMB (memory break)
 	 *
 	 * Then incredible subtlety: The access rights are
-	 * _PAGE_GATEWAY _PAGE_EXEC _PAGE_READ
+	 * _PAGE_GATEWAY, _PAGE_EXEC and _PAGE_WRITE
 	 * See 3-14 of the parisc 2.0 manual
 	 *
 	 * Finally, _PAGE_READ goes in the top bit of PL1 (so we
@@ -493,7 +501,7 @@
 
 	/* PAGE_USER indicates the page can be read with user privileges,
 	 * so deposit X1|11 to PL1|PL2 (remember the upper bit of PL1
-	 * contains _PAGE_READ */
+	 * contains _PAGE_READ) */
 	extrd,u,*=      \pte,_PAGE_USER_BIT+32,1,%r0
 	depdi		7,11,3,\prot
 	/* If we're a gateway page, drop PL2 back to zero for promotion
@@ -615,7 +623,7 @@
 
 	.text
 
-	.align	PAGE_SIZE
+	.align 4096
 
 ENTRY(fault_vector_20)
 	/* First vector is invalid (0) */
@@ -825,11 +833,6 @@ ENTRY(syscall_exit_rfi)
 	STREG   %r19,PT_SR7(%r16)
 
 intr_return:
-	/* NOTE: Need to enable interrupts incase we schedule. */
-	ssm     PSW_SM_I, %r0
-
-intr_check_resched:
-
 	/* check for reschedule */
 	mfctl   %cr30,%r1
 	LDREG   TI_FLAGS(%r1),%r19	/* sched.h: TIF_NEED_RESCHED */
@@ -855,6 +858,11 @@ intr_check_sig:
 	cmpib,COND(=),n 0,%r20,intr_restore /* backward */
 	LDREG	PT_IASQ1(%r16), %r20
 	cmpib,COND(=),n 0,%r20,intr_restore /* backward */
+
+	/* NOTE: We need to enable interrupts if we have to deliver
+	 * signals. We used to do this earlier but it caused kernel
+	 * stack overflows. */
+	ssm     PSW_SM_I, %r0
 
 	copy	%r0, %r25			/* long in_syscall = 0 */
 #ifdef CONFIG_64BIT
@@ -906,6 +914,10 @@ intr_do_resched:
 	LDREG	PT_IASQ1(%r16), %r20
 	cmpib,COND(=)	0, %r20, intr_do_preempt
 	nop
+
+	/* NOTE: We need to enable interrupts if we schedule.  We used
+	 * to do this earlier but it caused kernel stack overflows. */
+	ssm     PSW_SM_I, %r0
 
 #ifdef CONFIG_64BIT
 	ldo	-16(%r30),%r29		/* Reference param save area */
@@ -1694,7 +1706,8 @@ ENTRY(sys_\name\()_wrapper)
 	ldo	TASK_REGS(%r1),%r1
 	reg_save %r1
 	mfctl	%cr27, %r28
-	b	sys_\name
+	ldil	L%sys_\name, %r31
+	be	R%sys_\name(%sr4,%r31)
 	STREG	%r28, PT_CR27(%r1)
 ENDPROC(sys_\name\()_wrapper)
 	.endm
@@ -1747,44 +1760,6 @@ ENTRY(sys_rt_sigreturn_wrapper)
 	bv	%r0(%r2)
 	LDREG	PT_GR28(%r1),%r28  /* reload original r28 for syscall_exit */
 ENDPROC(sys_rt_sigreturn_wrapper)
-
-ENTRY(sys_sigaltstack_wrapper)
-	/* Get the user stack pointer */
-	LDREG	TI_TASK-THREAD_SZ_ALGN-FRAME_SIZE(%r30),%r1
-	ldo	TASK_REGS(%r1),%r24	/* get pt regs */
-	LDREG	TASK_PT_GR30(%r24),%r24
-	STREG	%r2, -RP_OFFSET(%r30)
-#ifdef CONFIG_64BIT
-	ldo	FRAME_SIZE(%r30), %r30
-	BL	do_sigaltstack,%r2
-	ldo	-16(%r30),%r29		/* Reference param save area */
-#else
-	BL	do_sigaltstack,%r2
-	ldo	FRAME_SIZE(%r30), %r30
-#endif
-
-	ldo	-FRAME_SIZE(%r30), %r30
-	LDREG	-RP_OFFSET(%r30), %r2
-	bv	%r0(%r2)
-	nop
-ENDPROC(sys_sigaltstack_wrapper)
-
-#ifdef CONFIG_64BIT
-ENTRY(sys32_sigaltstack_wrapper)
-	/* Get the user stack pointer */
-	LDREG	TI_TASK-THREAD_SZ_ALGN-FRAME_SIZE(%r30),%r24
-	LDREG	TASK_PT_GR30(%r24),%r24
-	STREG	%r2, -RP_OFFSET(%r30)
-	ldo	FRAME_SIZE(%r30), %r30
-	BL	do_sigaltstack32,%r2
-	ldo	-16(%r30),%r29		/* Reference param save area */
-
-	ldo	-FRAME_SIZE(%r30), %r30
-	LDREG	-RP_OFFSET(%r30), %r2
-	bv	%r0(%r2)
-	nop
-ENDPROC(sys32_sigaltstack_wrapper)
-#endif
 
 ENTRY(syscall_exit)
 	/* NOTE: HP-UX syscalls also come through here
@@ -1865,7 +1840,7 @@ syscall_restore:
 
 	/* Are we being ptraced? */
 	ldw	TASK_FLAGS(%r1),%r19
-	ldi	(_TIF_SINGLESTEP|_TIF_BLOCKSTEP),%r2
+	ldi	_TIF_SYSCALL_TRACE_MASK,%r2
 	and,COND(=)	%r19,%r2,%r0
 	b,n	syscall_restore_rfi
 
@@ -1978,15 +1953,23 @@ syscall_restore_rfi:
 	/* sr2 should be set to zero for userspace syscalls */
 	STREG	%r0,TASK_PT_SR2(%r1)
 
-pt_regs_ok:
 	LDREG	TASK_PT_GR31(%r1),%r2
-	depi	3,31,2,%r2			   /* ensure return to user mode. */
-	STREG	%r2,TASK_PT_IAOQ0(%r1)
+	depi	3,31,2,%r2		   /* ensure return to user mode. */
+	STREG   %r2,TASK_PT_IAOQ0(%r1)
 	ldo	4(%r2),%r2
 	STREG	%r2,TASK_PT_IAOQ1(%r1)
-	copy	%r25,%r16
 	b	intr_restore
-	nop
+	copy	%r25,%r16
+
+pt_regs_ok:
+	LDREG	TASK_PT_IAOQ0(%r1),%r2
+	depi	3,31,2,%r2		   /* ensure return to user mode. */
+	STREG	%r2,TASK_PT_IAOQ0(%r1)
+	LDREG	TASK_PT_IAOQ1(%r1),%r2
+	depi	3,31,2,%r2
+	STREG	%r2,TASK_PT_IAOQ1(%r1)
+	b	intr_restore
+	copy	%r25,%r16
 
 	.import schedule,code
 syscall_do_resched:
@@ -2027,6 +2010,47 @@ ftrace_stub:
 ENDPROC(return_to_handler)
 #endif	/* CONFIG_FUNCTION_TRACER */
 
+#ifdef CONFIG_IRQSTACKS
+/* void call_on_stack(unsigned long param1, void *func,
+		      unsigned long new_stack) */
+ENTRY(call_on_stack)
+	copy	%sp, %r1
+
+	/* Regarding the HPPA calling conventions for function pointers,
+	   we assume the PIC register is not changed across call.  For
+	   CONFIG_64BIT, the argument pointer is left to point at the
+	   argument region allocated for the call to call_on_stack. */
+# ifdef CONFIG_64BIT
+	/* Switch to new stack.  We allocate two 128 byte frames.  */
+	ldo	256(%arg2), %sp
+	/* Save previous stack pointer and return pointer in frame marker */
+	STREG	%rp, -144(%sp)
+	/* Calls always use function descriptor */
+	LDREG	16(%arg1), %arg1
+	bve,l	(%arg1), %rp
+	STREG	%r1, -136(%sp)
+	LDREG	-144(%sp), %rp
+	bve	(%rp)
+	LDREG	-136(%sp), %sp
+# else
+	/* Switch to new stack.  We allocate two 64 byte frames.  */
+	ldo	128(%arg2), %sp
+	/* Save previous stack pointer and return pointer in frame marker */
+	STREG	%r1, -68(%sp)
+	STREG	%rp, -84(%sp)
+	/* Calls use function descriptor if PLABEL bit is set */
+	bb,>=,n	%arg1, 30, 1f
+	depwi	0,31,2, %arg1
+	LDREG	0(%arg1), %arg1
+1:
+	be,l	0(%sr4,%arg1), %sr0, %r31
+	copy	%r31, %rp
+	LDREG	-84(%sp), %rp
+	bv	(%rp)
+	LDREG	-68(%sp), %sp
+# endif /* CONFIG_64BIT */
+ENDPROC(call_on_stack)
+#endif /* CONFIG_IRQSTACKS */
 
 get_register:
 	/*

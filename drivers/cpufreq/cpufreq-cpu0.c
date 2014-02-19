@@ -12,12 +12,12 @@
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
 
 #include <linux/clk.h>
-#include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/opp.h>
+#include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 
@@ -44,8 +44,9 @@ static int cpu0_set_target(struct cpufreq_policy *policy,
 {
 	struct cpufreq_freqs freqs;
 	struct opp *opp;
-	unsigned long freq_Hz, volt = 0, volt_old = 0, tol = 0;
-	unsigned int index, cpu;
+	unsigned long volt = 0, volt_old = 0, tol = 0;
+	long freq_Hz;
+	unsigned int index;
 	int ret;
 
 	ret = cpufreq_frequency_table_target(policy, freq_table, target_freq,
@@ -65,18 +66,20 @@ static int cpu0_set_target(struct cpufreq_policy *policy,
 	if (freqs.old == freqs.new)
 		return 0;
 
-	for_each_online_cpu(cpu) {
-		freqs.cpu = cpu;
-		cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
-	}
+	cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
 
 	if (cpu_reg) {
+		rcu_read_lock();
 		opp = opp_find_freq_ceil(cpu_dev, &freq_Hz);
 		if (IS_ERR(opp)) {
+			rcu_read_unlock();
 			pr_err("failed to find OPP for %ld\n", freq_Hz);
-			return PTR_ERR(opp);
+			freqs.new = freqs.old;
+			ret = PTR_ERR(opp);
+			goto post_notify;
 		}
 		volt = opp_get_voltage(opp);
+		rcu_read_unlock();
 		tol = volt * voltage_tolerance / 100;
 		volt_old = regulator_get_voltage(cpu_reg);
 	}
@@ -91,7 +94,7 @@ static int cpu0_set_target(struct cpufreq_policy *policy,
 		if (ret) {
 			pr_err("failed to scale voltage up: %d\n", ret);
 			freqs.new = freqs.old;
-			return ret;
+			goto post_notify;
 		}
 	}
 
@@ -100,7 +103,8 @@ static int cpu0_set_target(struct cpufreq_policy *policy,
 		pr_err("failed to set clock rate: %d\n", ret);
 		if (cpu_reg)
 			regulator_set_voltage_tol(cpu_reg, volt_old, tol);
-		return ret;
+		freqs.new = freqs.old;
+		goto post_notify;
 	}
 
 	/* scaling down?  scale voltage after frequency */
@@ -110,24 +114,18 @@ static int cpu0_set_target(struct cpufreq_policy *policy,
 			pr_err("failed to scale voltage down: %d\n", ret);
 			clk_set_rate(cpu_clk, freqs.old * 1000);
 			freqs.new = freqs.old;
-			return ret;
 		}
 	}
 
-	for_each_online_cpu(cpu) {
-		freqs.cpu = cpu;
-		cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
-	}
+post_notify:
+	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
 
-	return 0;
+	return ret;
 }
 
 static int cpu0_cpufreq_init(struct cpufreq_policy *policy)
 {
 	int ret;
-
-	if (policy->cpu != 0)
-		return -EINVAL;
 
 	ret = cpufreq_frequency_table_cpuinfo(policy, freq_table);
 	if (ret) {
@@ -143,7 +141,6 @@ static int cpu0_cpufreq_init(struct cpufreq_policy *policy)
 	 * share the clock and voltage and clock.  Use cpufreq affected_cpus
 	 * interface to have all CPUs scaled together.
 	 */
-	policy->shared_type = CPUFREQ_SHARED_TYPE_ANY;
 	cpumask_setall(policy->cpus);
 
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
@@ -174,34 +171,38 @@ static struct cpufreq_driver cpu0_cpufreq_driver = {
 	.attr = cpu0_cpufreq_attr,
 };
 
-static int cpu0_cpufreq_driver_init(void)
+static int cpu0_cpufreq_probe(struct platform_device *pdev)
 {
-	struct device_node *np;
+	struct device_node *np, *parent;
 	int ret;
 
-	np = of_find_node_by_path("/cpus/cpu@0");
+	parent = of_find_node_by_path("/cpus");
+	if (!parent) {
+		pr_err("failed to find OF /cpus\n");
+		return -ENOENT;
+	}
+
+	for_each_child_of_node(parent, np) {
+		if (of_get_property(np, "operating-points", NULL))
+			break;
+	}
+
 	if (!np) {
 		pr_err("failed to find cpu0 node\n");
 		return -ENOENT;
 	}
 
-	cpu_dev = get_cpu_device(0);
-	if (!cpu_dev) {
-		pr_err("failed to get cpu0 device\n");
-		ret = -ENODEV;
-		goto out_put_node;
-	}
-
+	cpu_dev = &pdev->dev;
 	cpu_dev->of_node = np;
 
-	cpu_clk = clk_get(cpu_dev, NULL);
+	cpu_clk = devm_clk_get(cpu_dev, NULL);
 	if (IS_ERR(cpu_clk)) {
 		ret = PTR_ERR(cpu_clk);
 		pr_err("failed to get cpu0 clock: %d\n", ret);
 		goto out_put_node;
 	}
 
-	cpu_reg = regulator_get(cpu_dev, "cpu0");
+	cpu_reg = devm_regulator_get(cpu_dev, "cpu0");
 	if (IS_ERR(cpu_reg)) {
 		pr_warn("failed to get cpu0 regulator\n");
 		cpu_reg = NULL;
@@ -236,12 +237,14 @@ static int cpu0_cpufreq_driver_init(void)
 		 */
 		for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++)
 			;
+		rcu_read_lock();
 		opp = opp_find_freq_exact(cpu_dev,
 				freq_table[0].frequency * 1000, true);
 		min_uV = opp_get_voltage(opp);
 		opp = opp_find_freq_exact(cpu_dev,
 				freq_table[i-1].frequency * 1000, true);
 		max_uV = opp_get_voltage(opp);
+		rcu_read_unlock();
 		ret = regulator_set_voltage_time(cpu_reg, min_uV, max_uV);
 		if (ret > 0)
 			transition_latency += ret * 1000;
@@ -254,6 +257,7 @@ static int cpu0_cpufreq_driver_init(void)
 	}
 
 	of_node_put(np);
+	of_node_put(parent);
 	return 0;
 
 out_free_table:
@@ -262,7 +266,24 @@ out_put_node:
 	of_node_put(np);
 	return ret;
 }
-late_initcall(cpu0_cpufreq_driver_init);
+
+static int cpu0_cpufreq_remove(struct platform_device *pdev)
+{
+	cpufreq_unregister_driver(&cpu0_cpufreq_driver);
+	opp_free_cpufreq_table(cpu_dev, &freq_table);
+
+	return 0;
+}
+
+static struct platform_driver cpu0_cpufreq_platdrv = {
+	.driver = {
+		.name	= "cpufreq-cpu0",
+		.owner	= THIS_MODULE,
+	},
+	.probe		= cpu0_cpufreq_probe,
+	.remove		= cpu0_cpufreq_remove,
+};
+module_platform_driver(cpu0_cpufreq_platdrv);
 
 MODULE_AUTHOR("Shawn Guo <shawn.guo@linaro.org>");
 MODULE_DESCRIPTION("Generic CPU0 cpufreq driver");

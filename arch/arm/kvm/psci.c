@@ -55,6 +55,13 @@ static unsigned long kvm_psci_vcpu_on(struct kvm_vcpu *source_vcpu)
 		return KVM_PSCI_RET_INVAL;
 
 	kvm_reset_vcpu(vcpu);
+
+	/* Gracefully handle Thumb2 entry point */
+	if (vcpu_mode_is_32bit(vcpu) && (target_pc & 1)) {
+		target_pc &= ~((phys_addr_t) 1);
+		vcpu_set_thumb(vcpu);
+	}
+
 	*vcpu_pc(vcpu) = target_pc;
 	vcpu->arch.pause = false;
 	smp_mb();		/* Make sure the above is visible */

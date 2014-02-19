@@ -55,7 +55,7 @@
 #undef REV_PCI_ORDER
 #undef ROCKET_DEBUG_IO
 
-#define POLL_PERIOD HZ/100	/*  Polling period .01 seconds (10ms) */
+#define POLL_PERIOD (HZ/100)	/*  Polling period .01 seconds (10ms) */
 
 /****** Kernel includes ******/
 
@@ -315,9 +315,8 @@ static inline int rocket_paranoia_check(struct r_port *info,
  *  that receive data is present on a serial port.  Pulls data from FIFO, moves it into the 
  *  tty layer.  
  */
-static void rp_do_receive(struct r_port *info,
-			  struct tty_struct *tty,
-			  CHANNEL_t * cp, unsigned int ChanStatus)
+static void rp_do_receive(struct r_port *info, CHANNEL_t *cp,
+		unsigned int ChanStatus)
 {
 	unsigned int CharNStat;
 	int ToRecv, wRecv, space;
@@ -379,7 +378,8 @@ static void rp_do_receive(struct r_port *info,
 				flag = TTY_OVERRUN;
 			else
 				flag = TTY_NORMAL;
-			tty_insert_flip_char(tty, CharNStat & 0xff, flag);
+			tty_insert_flip_char(&info->port, CharNStat & 0xff,
+					flag);
 			ToRecv--;
 		}
 
@@ -399,7 +399,7 @@ static void rp_do_receive(struct r_port *info,
 		 * characters at time by doing repeated word IO
 		 * transfer.
 		 */
-		space = tty_prepare_flip_string(tty, &cbuf, ToRecv);
+		space = tty_prepare_flip_string(&info->port, &cbuf, ToRecv);
 		if (space < ToRecv) {
 #ifdef ROCKET_DEBUG_RECEIVE
 			printk(KERN_INFO "rp_do_receive:insufficient space ToRecv=%d space=%d\n", ToRecv, space);
@@ -415,7 +415,7 @@ static void rp_do_receive(struct r_port *info,
 			cbuf[ToRecv - 1] = sInB(sGetTxRxDataIO(cp));
 	}
 	/*  Push the data up to the tty layer */
-	tty_flip_buffer_push(tty);
+	tty_flip_buffer_push(&info->port);
 }
 
 /*
@@ -449,7 +449,7 @@ static void rp_do_transmit(struct r_port *info)
 
 	/*  Loop sending data to FIFO until done or FIFO full */
 	while (1) {
-		if (tty->stopped || tty->hw_stopped)
+		if (tty->stopped)
 			break;
 		c = min(info->xmit_fifo_room, info->xmit_cnt);
 		c = min(c, XMIT_BUF_SIZE - info->xmit_tail);
@@ -494,7 +494,6 @@ static void rp_do_transmit(struct r_port *info)
 static void rp_handle_port(struct r_port *info)
 {
 	CHANNEL_t *cp;
-	struct tty_struct *tty;
 	unsigned int IntMask, ChanStatus;
 
 	if (!info)
@@ -505,12 +504,7 @@ static void rp_handle_port(struct r_port *info)
 				"info->flags & NOT_INIT\n");
 		return;
 	}
-	tty = tty_port_tty_get(&info->port);
-	if (!tty) {
-		printk(KERN_WARNING "rp: WARNING: rp_handle_port called with "
-				"tty==NULL\n");
-		return;
-	}
+
 	cp = &info->channel;
 
 	IntMask = sGetChanIntID(cp) & info->intmask;
@@ -519,7 +513,7 @@ static void rp_handle_port(struct r_port *info)
 #endif
 	ChanStatus = sGetChanStatus(cp);
 	if (IntMask & RXF_TRIG) {	/* Rx FIFO trigger level */
-		rp_do_receive(info, tty, cp, ChanStatus);
+		rp_do_receive(info, cp, ChanStatus);
 	}
 	if (IntMask & DELTA_CD) {	/* CD change  */
 #if (defined(ROCKET_DEBUG_OPEN) || defined(ROCKET_DEBUG_INTR) || defined(ROCKET_DEBUG_HANGUP))
@@ -530,7 +524,7 @@ static void rp_handle_port(struct r_port *info)
 #ifdef ROCKET_DEBUG_HANGUP
 			printk(KERN_INFO "CD drop, calling hangup.\n");
 #endif
-			tty_hangup(tty);
+			tty_port_tty_hangup(&info->port, false);
 		}
 		info->cd_status = (ChanStatus & CD_ACT) ? 1 : 0;
 		wake_up_interruptible(&info->port.open_wait);
@@ -543,7 +537,6 @@ static void rp_handle_port(struct r_port *info)
 		printk(KERN_INFO "DSR change...\n");
 	}
 #endif
-	tty_kref_put(tty);
 }
 
 /*
@@ -1113,15 +1106,12 @@ static void rp_set_termios(struct tty_struct *tty,
 
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) && (tty->termios.c_cflag & CBAUD)) {
-		if (!tty->hw_stopped || !(tty->termios.c_cflag & CRTSCTS))
-			sSetRTS(cp);
+		sSetRTS(cp);
 		sSetDTR(cp);
 	}
 
-	if ((old_termios->c_cflag & CRTSCTS) && !(tty->termios.c_cflag & CRTSCTS)) {
-		tty->hw_stopped = 0;
+	if ((old_termios->c_cflag & CRTSCTS) && !(tty->termios.c_cflag & CRTSCTS))
 		rp_start(tty);
-	}
 }
 
 static int rp_break(struct tty_struct *tty, int break_state)
@@ -1577,10 +1567,10 @@ static int rp_put_char(struct tty_struct *tty, unsigned char ch)
 	spin_lock_irqsave(&info->slock, flags);
 	cp = &info->channel;
 
-	if (!tty->stopped && !tty->hw_stopped && info->xmit_fifo_room == 0)
+	if (!tty->stopped && info->xmit_fifo_room == 0)
 		info->xmit_fifo_room = TXFIFO_SIZE - sGetTxCnt(cp);
 
-	if (tty->stopped || tty->hw_stopped || info->xmit_fifo_room == 0 || info->xmit_cnt != 0) {
+	if (tty->stopped || info->xmit_fifo_room == 0 || info->xmit_cnt != 0) {
 		info->xmit_buf[info->xmit_head++] = ch;
 		info->xmit_head &= XMIT_BUF_SIZE - 1;
 		info->xmit_cnt++;
@@ -1621,14 +1611,14 @@ static int rp_write(struct tty_struct *tty,
 #endif
 	cp = &info->channel;
 
-	if (!tty->stopped && !tty->hw_stopped && info->xmit_fifo_room < count)
+	if (!tty->stopped && info->xmit_fifo_room < count)
 		info->xmit_fifo_room = TXFIFO_SIZE - sGetTxCnt(cp);
 
         /*
 	 *  If the write queue for the port is empty, and there is FIFO space, stuff bytes 
 	 *  into FIFO.  Use the write queue for temp storage.
          */
-	if (!tty->stopped && !tty->hw_stopped && info->xmit_cnt == 0 && info->xmit_fifo_room > 0) {
+	if (!tty->stopped && info->xmit_cnt == 0 && info->xmit_fifo_room > 0) {
 		c = min(count, info->xmit_fifo_room);
 		b = buf;
 
@@ -1676,7 +1666,7 @@ static int rp_write(struct tty_struct *tty,
 		retval += c;
 	}
 
-	if ((retval > 0) && !tty->stopped && !tty->hw_stopped)
+	if ((retval > 0) && !tty->stopped)
 		set_bit((info->aiop * 8) + info->chan, (void *) &xmit_flags[info->board]);
 	
 end:
@@ -1758,8 +1748,29 @@ static void rp_flush_buffer(struct tty_struct *tty)
 
 #ifdef CONFIG_PCI
 
-static struct pci_device_id __used rocket_pci_ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_ANY_ID) },
+static DEFINE_PCI_DEVICE_TABLE(rocket_pci_ids) = {
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP4QUAD) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8OCTA) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_URP8OCTA) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_URP8INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8J) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP4J) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8SNI) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP16SNI) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP16INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_URP16INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_CRP16INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP32INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_URP32INTF) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RPP4) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RPP8) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP2_232) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP2_422) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP6M) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP4M) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_UPCI_RM3_8PORT) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_UPCI_RM3_4PORT) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, rocket_pci_ids);
@@ -1781,7 +1792,8 @@ static __init int register_PCI(int i, struct pci_dev *dev)
 	WordIO_t ConfigIO = 0;
 	ByteIO_t UPCIRingInd = 0;
 
-	if (!dev || pci_enable_device(dev))
+	if (!dev || !pci_match_id(rocket_pci_ids, dev) ||
+	    pci_enable_device(dev))
 		return 0;
 
 	rcktpt_io_addr[i] = pci_resource_start(dev, 0);
@@ -2507,6 +2519,7 @@ static int sInitController(CONTROLLER_T * CtlP, int CtlNum, ByteIO_t MudbacIO,
 		return (CtlP->NumAiop);
 }
 
+#ifdef CONFIG_PCI
 /***************************************************************************
 Function: sPCIInitController
 Purpose:  Initialization of controller global registers and controller
@@ -2626,6 +2639,26 @@ static int sPCIInitController(CONTROLLER_T * CtlP, int CtlNum,
 	else
 		return (CtlP->NumAiop);
 }
+
+/*  Resets the speaker controller on RocketModem II and III devices */
+static void rmSpeakerReset(CONTROLLER_T * CtlP, unsigned long model)
+{
+	ByteIO_t addr;
+
+	/* RocketModem II speaker control is at the 8th port location of offset 0x40 */
+	if ((model == MODEL_RP4M) || (model == MODEL_RP6M)) {
+		addr = CtlP->AiopIO[0] + 0x4F;
+		sOutB(addr, 0);
+	}
+
+	/* RocketModem III speaker control is at the 1st port location of offset 0x80 */
+	if ((model == MODEL_UPCI_RM3_8PORT)
+	    || (model == MODEL_UPCI_RM3_4PORT)) {
+		addr = CtlP->AiopIO[0] + 0x88;
+		sOutB(addr, 0);
+	}
+}
+#endif
 
 /***************************************************************************
 Function: sReadAiopID
@@ -3114,25 +3147,6 @@ static void sPCIModemReset(CONTROLLER_T * CtlP, int chan, int on)
 	if (!on)
 		addr += 8;
 	sOutB(addr + chan, 0);	/* apply or remove reset */
-}
-
-/*  Resets the speaker controller on RocketModem II and III devices */
-static void rmSpeakerReset(CONTROLLER_T * CtlP, unsigned long model)
-{
-	ByteIO_t addr;
-
-	/* RocketModem II speaker control is at the 8th port location of offset 0x40 */
-	if ((model == MODEL_RP4M) || (model == MODEL_RP6M)) {
-		addr = CtlP->AiopIO[0] + 0x4F;
-		sOutB(addr, 0);
-	}
-
-	/* RocketModem III speaker control is at the 1st port location of offset 0x80 */
-	if ((model == MODEL_UPCI_RM3_8PORT)
-	    || (model == MODEL_UPCI_RM3_4PORT)) {
-		addr = CtlP->AiopIO[0] + 0x88;
-		sOutB(addr, 0);
-	}
 }
 
 /*  Returns the line number given the controller (board), aiop and channel number */

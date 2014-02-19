@@ -1,4 +1,4 @@
-#include <asm/hardware/gic.h>
+#include <linux/irqchip/arm-gic.h>
 
 #define VCPU_USR_REG(_reg_nr)	(VCPU_USR_REGS + (_reg_nr * 4))
 #define VCPU_USR_SP		(VCPU_USR_REG(13))
