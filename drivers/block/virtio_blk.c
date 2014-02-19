@@ -500,6 +500,7 @@ static void virtblk_init_vbr(void *data, struct blk_mq_hw_ctx *hctx,
 
 static int virtblk_probe(struct virtio_device *vdev)
 {
+printk("virtblk_probe\n");
 	struct virtio_blk *vblk;
 	struct request_queue *q;
 	int err, index;

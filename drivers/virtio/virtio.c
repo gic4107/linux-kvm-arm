@@ -119,6 +119,7 @@ EXPORT_SYMBOL_GPL(virtio_check_driver_offered_feature);
 
 static int virtio_dev_probe(struct device *_d)
 {
+printk("virtio_dev_probe ... ");
 	int err, i;
 	struct virtio_device *dev = dev_to_virtio(_d);
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
@@ -145,7 +146,7 @@ static int virtio_dev_probe(struct device *_d)
 			set_bit(i, dev->features);
 
 	dev->config->finalize_features(dev);
-
+printk("call drv->probe(dev): \n");
 	err = drv->probe(dev);
 	if (err)
 		add_status(dev, VIRTIO_CONFIG_S_FAILED);
