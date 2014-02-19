@@ -206,7 +206,7 @@ static void virtio_mmio_mmio_callback(u64 addr, u8 *data, u32 len,
 
 	if (offset >= VIRTIO_MMIO_CONFIG) {
 		offset -= VIRTIO_MMIO_CONFIG;
-		virtio_mmio_device_specific(offset, data, len, is_write, ptr);
+		virtio_mmio_device_specific(offset, data, len, is_write, ptr);		// read or write config
 		return;
 	}
 
@@ -257,12 +257,12 @@ int virtio_mmio_init(struct kvm *kvm, void *dev, struct virtio_device *vdev,
 	struct virtio_mmio *vmmio = vdev->virtio;
 	u8 pin, line;
 
-	vmmio->addr	= virtio_mmio_get_io_space_block(VIRTIO_MMIO_IO_SIZE);
+	vmmio->addr	= virtio_mmio_get_io_space_block(VIRTIO_MMIO_IO_SIZE);	// virtio-mmio's address for this vdev
 	vmmio->kvm	= kvm;
 	vmmio->dev	= dev;
 
-	kvm__register_mmio(kvm, vmmio->addr, VIRTIO_MMIO_IO_SIZE,
-			   false, virtio_mmio_mmio_callback, vdev);
+	kvm__register_mmio(kvm, vmmio->addr, VIRTIO_MMIO_IO_SIZE,			// insert callback and vdev to mmio_tree
+			   false, virtio_mmio_mmio_callback, vdev);					// callback will be called by kvm__emulate_mmio
 
 	vmmio->hdr = (struct virtio_mmio_hdr) {
 		.magic		= {'v', 'i', 'r', 't'},
@@ -272,15 +272,15 @@ int virtio_mmio_init(struct kvm *kvm, void *dev, struct virtio_device *vdev,
 		.queue_num_max	= 256,
 	};
 
-	if (irq__register_device(subsys_id, &pin, &line) < 0)
-		return -1;
+	if (irq__register_device(subsys_id, &pin, &line) < 0)	// sybsys_id: VIRTIO_ID_BLOCK
+		return -1;											// *line = gic__alloc_irqnum(); 
 	vmmio->irq = line;
 	vmmio->dev_hdr = (struct device_header) {
 		.bus_type	= DEVICE_BUS_MMIO,
 		.data		= generate_virtio_mmio_fdt_node,
 	};
 
-	device__register(&vmmio->dev_hdr);
+	device__register(&vmmio->dev_hdr);		// register device into DEVICE_BUS_MMIO, no register callback function
 
 	/*
 	 * Instantiate guest virtio-mmio devices using kernel command line

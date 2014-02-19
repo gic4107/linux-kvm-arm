@@ -76,7 +76,7 @@ int kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, bool c
 		.ptr	= ptr,
 	};
 
-	if (coalesce) {
+	if (coalesce) {		// false in virt_blk
 		zone = (struct kvm_coalesced_mmio_zone) {
 			.addr	= phys_addr,
 			.size	= phys_addr_len,

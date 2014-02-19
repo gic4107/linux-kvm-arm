@@ -294,6 +294,7 @@ int virtio_blk__init(struct kvm *kvm)
 	for (i = 0; i < kvm->nr_disks; i++) {
 		if (kvm->disks[i]->wwpn)
 			continue;
+		printf("create %d virtio_blk device\n", i);
 		r = virtio_blk__init_one(kvm, kvm->disks[i]);
 		if (r < 0)
 			goto cleanup;

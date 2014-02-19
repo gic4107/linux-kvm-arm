@@ -42,12 +42,12 @@ struct virtio_mmio_hdr {
 } __attribute__((packed));
 
 struct virtio_mmio {
-	u32			addr;
-	void			*dev;
+	u32			addr;		// virtio-mmio's address for this vdev
+	void			*dev;	// struct blk_dev for virt_blk
 	struct kvm		*kvm;
 	u8			irq;
-	struct virtio_mmio_hdr	hdr;
-	struct device_header	dev_hdr;
+	struct virtio_mmio_hdr	hdr;		// virtio mechanism description about this device
+	struct device_header	dev_hdr;	// virtio device's info
 	struct virtio_mmio_ioevent_param ioeventfds[VIRTIO_MMIO_MAX_VQ];
 };
 
