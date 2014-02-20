@@ -40,8 +40,8 @@ int device__register(struct device_header *dev)
 			return -EEXIST;
 	}
 
-	rb_link_node(&dev->node, parent, node);
-	rb_insert_color(&dev->node, &bus->root);
+	rb_link_node(&dev->node, parent, node);		// link node with parent
+	rb_insert_color(&dev->node, &bus->root);	// insert node
 	return 0;
 }
 

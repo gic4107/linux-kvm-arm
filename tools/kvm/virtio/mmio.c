@@ -261,8 +261,8 @@ int virtio_mmio_init(struct kvm *kvm, void *dev, struct virtio_device *vdev,
 	vmmio->kvm	= kvm;
 	vmmio->dev	= dev;
 
-	kvm__register_mmio(kvm, vmmio->addr, VIRTIO_MMIO_IO_SIZE,			// insert callback and vdev to mmio_tree
-			   false, virtio_mmio_mmio_callback, vdev);					// callback will be called by kvm__emulate_mmio
+	kvm__register_mmio(kvm, vmmio->addr, VIRTIO_MMIO_IO_SIZE,		// insert callback add vdev to mmio_tree, index with vmmio->addr
+			   false, virtio_mmio_mmio_callback, vdev);		// callback will be called by kvm__emulate_mmio
 
 	vmmio->hdr = (struct virtio_mmio_hdr) {
 		.magic		= {'v', 'i', 'r', 't'},
@@ -273,14 +273,14 @@ int virtio_mmio_init(struct kvm *kvm, void *dev, struct virtio_device *vdev,
 	};
 
 	if (irq__register_device(subsys_id, &pin, &line) < 0)	// sybsys_id: VIRTIO_ID_BLOCK
-		return -1;											// *line = gic__alloc_irqnum(); 
+		return -1;					// *line = gic__alloc_irqnum(); 
 	vmmio->irq = line;
 	vmmio->dev_hdr = (struct device_header) {
 		.bus_type	= DEVICE_BUS_MMIO,
 		.data		= generate_virtio_mmio_fdt_node,
 	};
 
-	device__register(&vmmio->dev_hdr);		// register device into DEVICE_BUS_MMIO, no register callback function
+	device__register(&vmmio->dev_hdr);		// according bus type to insert device node into device tree
 
 	/*
 	 * Instantiate guest virtio-mmio devices using kernel command line
