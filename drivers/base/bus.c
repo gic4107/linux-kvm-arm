@@ -296,8 +296,10 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 
 	klist_iter_init_node(&bus->p->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
-	while ((dev = next_device(&i)) && !error)
+	while ((dev = next_device(&i)) && !error) {
+		printk("dev's init_name=%s\n", dev->init_name);
 		error = fn(dev, data);
+	}
 	klist_iter_exit(&i);
 	return error;
 }
@@ -678,7 +680,9 @@ int bus_add_driver(struct device_driver *drv)
 
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
-		error = driver_attach(drv);
+//		printk("call driver_attach\n");		// yap
+		error = driver_attach(drv);		// find a matched device from all device in this bus to attach this driver
+							// use drive and driver's id table to match
 		if (error)
 			goto out_unregister;
 	}

@@ -187,7 +187,7 @@ int register_virtio_driver(struct virtio_driver *driver)
 {
 	/* Catch this early. */
 	BUG_ON(driver->feature_table_size && !driver->feature_table);
-	driver->driver.bus = &virtio_bus;
+	driver->driver.bus = &virtio_bus;	// virtio_bus has already initialized by virtio_init 
 	return driver_register(&driver->driver);
 }
 EXPORT_SYMBOL_GPL(register_virtio_driver);

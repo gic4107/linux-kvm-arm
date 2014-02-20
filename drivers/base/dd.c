@@ -450,13 +450,13 @@ static int __driver_attach(struct device *dev, void *data)
 	 * is an error.
 	 */
 
-	if (!driver_match_device(drv, dev))
+	if (!driver_match_device(drv, dev))	// return 1 if match
 		return 0;
 
 	if (dev->parent)	/* Needed for USB */
 		device_lock(dev->parent);
 	device_lock(dev);
-	if (!dev->driver)
+	if (!dev->driver)			// use probe function to bind device and driver
 		driver_probe_device(drv, dev);
 	device_unlock(dev);
 	if (dev->parent)

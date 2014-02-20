@@ -276,6 +276,7 @@ EXPORT_SYMBOL_GPL(platform_device_add_data);
  */
 int platform_device_add(struct platform_device *pdev)
 {
+printk("platform_device_add, name=%s\n", pdev->name);
 	int i, ret;
 
 	if (!pdev)
@@ -916,7 +917,7 @@ int __init platform_bus_init(void)
 	int error;
 
 	early_platform_cleanup();
-
+//printk("1: %s\n", (&platform_bus)->init_name); // platform
 	error = device_register(&platform_bus);
 	if (error)
 		return error;

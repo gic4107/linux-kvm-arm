@@ -35,7 +35,7 @@ struct subsys_private {
 	struct klist klist_devices;
 	struct klist klist_drivers;
 	struct blocking_notifier_head bus_notifier;
-	unsigned int drivers_autoprobe:1;
+	unsigned int drivers_autoprobe:1;	// drivers_autoprobe use 1 bit rather than sizeof(int)
 	struct bus_type *bus;
 
 	struct kset glue_dirs;

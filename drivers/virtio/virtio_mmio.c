@@ -486,7 +486,7 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 
 	vm_dev->vdev.id.device = readl(vm_dev->base + VIRTIO_MMIO_DEVICE_ID);
 	vm_dev->vdev.id.vendor = readl(vm_dev->base + VIRTIO_MMIO_VENDOR_ID);
-
+printk("vm_dev->vdev.id.device=%d, vendor=0x%x\n", vm_dev->vdev.id.device, vm_dev->vdev.id.vendor);	// (3, 0x4d564b4c), (2, 0x4d564b4c), 0x4d564b4c define by kvmtool
 	writel(PAGE_SIZE, vm_dev->base + VIRTIO_MMIO_GUEST_PAGE_SIZE);
 
 	platform_set_drvdata(pdev, vm_dev);

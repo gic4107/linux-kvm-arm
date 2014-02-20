@@ -150,7 +150,6 @@ int driver_register(struct device_driver *drv)
 	struct device_driver *other;
 
 	BUG_ON(!drv->bus->p);
-
 	if ((drv->bus->probe && drv->probe) ||
 	    (drv->bus->remove && drv->remove) ||
 	    (drv->bus->shutdown && drv->shutdown))
@@ -164,7 +163,7 @@ int driver_register(struct device_driver *drv)
 		return -EBUSY;
 	}
 
-	ret = bus_add_driver(drv);
+	ret = bus_add_driver(drv);		// add this driver into virtio_bus
 	if (ret)
 		return ret;
 	ret = driver_add_groups(drv, drv->groups);

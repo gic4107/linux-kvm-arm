@@ -741,7 +741,7 @@ static int virtblk_restore(struct virtio_device *vdev)
 #endif
 
 static const struct virtio_device_id id_table[] = {
-	{ VIRTIO_ID_BLOCK, VIRTIO_DEV_ANY_ID },
+	{ VIRTIO_ID_BLOCK, VIRTIO_DEV_ANY_ID },		// subsystem device id, subsystem vendor id
 	{ 0 },
 };
 
@@ -774,7 +774,7 @@ static int __init init(void)
 	if (!virtblk_wq)
 		return -ENOMEM;
 
-	major = register_blkdev(0, "virtblk");
+	major = register_blkdev(0, "virtblk");	// register a major number in global major_names array
 	if (major < 0) {
 		error = major;
 		goto out_destroy_workqueue;
