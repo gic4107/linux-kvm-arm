@@ -211,9 +211,9 @@ static void virtio_mmio_mmio_callback(u64 addr, u8 *data, u32 len,
 	}
 
 	if (is_write)
-		virtio_mmio_config_out(offset, data, len, ptr);
+		virtio_mmio_config_out(offset, data, len, ptr);	// front-end do write
 	else
-		virtio_mmio_config_in(offset, data, len, ptr);
+		virtio_mmio_config_in(offset, data, len, ptr);	// front-end do read
 }
 
 #ifdef CONFIG_HAS_LIBFDT
