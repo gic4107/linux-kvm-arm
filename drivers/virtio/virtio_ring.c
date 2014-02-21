@@ -58,7 +58,7 @@ struct vring_virtqueue
 	struct virtqueue vq;
 
 	/* Actual memory layout for this queue */
-	struct vring vring;
+	struct vring vring;	// *desc, *avail, *used
 
 	/* Can we use weak barriers? */
 	bool weak_barriers;
@@ -755,7 +755,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      unsigned int vring_align,
 				      struct virtio_device *vdev,
 				      bool weak_barriers,
-				      void *pages,
+				      void *pages,	// GPA
 				      bool (*notify)(struct virtqueue *),
 				      void (*callback)(struct virtqueue *),
 				      const char *name)

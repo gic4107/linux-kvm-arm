@@ -136,8 +136,8 @@ printk("virtio_dev_probe ... ");
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
 		BUG_ON(f >= 32);
-		if (device_features & (1 << f))
-			set_bit(f, dev->features);
+		if (device_features & (1 << f))		// if device do support,
+			set_bit(f, dev->features);	// set to front-end
 	}
 
 	/* Transport features always preserved to pass to finalize_features. */
@@ -145,7 +145,7 @@ printk("virtio_dev_probe ... ");
 		if (device_features & (1 << i))
 			set_bit(i, dev->features);
 
-	dev->config->finalize_features(dev);
+	dev->config->finalize_features(dev);	// write guest feature 
 printk("call drv->probe(dev): \n");
 	err = drv->probe(dev);
 	if (err)

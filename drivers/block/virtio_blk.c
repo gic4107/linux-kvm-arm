@@ -510,14 +510,14 @@ printk("virtblk_probe\n");
 	u16 min_io_size;
 	u8 physical_block_exp, alignment_offset;
 
-	err = ida_simple_get(&vd_index_ida, 0, minor_to_index(1 << MINORBITS),
+	err = ida_simple_get(&vd_index_ida, 0, minor_to_index(1 << MINORBITS),		// get a new id
 			     GFP_KERNEL);
 	if (err < 0)
 		goto out;
 	index = err;
 
 	/* We need to know how many segments before we allocate. */
-	err = virtio_cread_feature(vdev, VIRTIO_BLK_F_SEG_MAX,
+	err = virtio_cread_feature(vdev, VIRTIO_BLK_F_SEG_MAX,	// result in sg_elems
 				   struct virtio_blk_config, seg_max,
 				   &sg_elems);
 

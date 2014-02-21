@@ -174,7 +174,7 @@ static void vm_get(struct virtio_device *vdev, unsigned offset,
 	u8 *ptr = buf;
 	int i;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++)	// read 8-bit per times
 		ptr[i] = readb(vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
 }
 
@@ -314,7 +314,7 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	writel(index, vm_dev->base + VIRTIO_MMIO_QUEUE_SEL);
 
 	/* Queue shouldn't already be set up. */
-	if (readl(vm_dev->base + VIRTIO_MMIO_QUEUE_PFN)) {
+	if (readl(vm_dev->base + VIRTIO_MMIO_QUEUE_PFN)) {	// should be NULL
 		err = -ENOENT;
 		goto error_available;
 	}
@@ -331,7 +331,7 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	 * to a minimal size, just big enough to fit descriptor table
 	 * and two rings (which makes it "alignment_size * 2")
 	 */
-	info->num = readl(vm_dev->base + VIRTIO_MMIO_QUEUE_NUM_MAX);
+	info->num = readl(vm_dev->base + VIRTIO_MMIO_QUEUE_NUM_MAX);	// vq's description table size
 
 	/* If the device reports a 0 entry queue, we won't be able to
 	 * use it to perform I/O, and vring_new_virtqueue() can't create
@@ -351,7 +351,7 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 			goto error_alloc_pages;
 		}
 
-		info->queue = alloc_pages_exact(size, GFP_KERNEL | __GFP_ZERO);
+		info->queue = alloc_pages_exact(size, GFP_KERNEL | __GFP_ZERO);	// allocate an exact number physically-contiguous pages
 		if (info->queue)
 			break;
 
@@ -443,15 +443,16 @@ static const struct virtio_config_ops virtio_mmio_config_ops = {
 
 static int virtio_mmio_probe(struct platform_device *pdev)
 {
+printk("in virtio_mmio_probe ... \n");
 	struct virtio_mmio_device *vm_dev;
 	struct resource *mem;
 	unsigned long magic;
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);	// get address of this platform device	
 	if (!mem)
 		return -EINVAL;
 printk("pdev->name=%s\n", pdev->name);	// 10000.virtio
-	if (!devm_request_mem_region(&pdev->dev, mem->start,
+	if (!devm_request_mem_region(&pdev->dev, mem->start,	// check whether this region can be used, if so add to dev
 			resource_size(mem), pdev->name))
 		return -EBUSY;
 
@@ -489,8 +490,7 @@ printk("pdev->name=%s\n", pdev->name);	// 10000.virtio
 printk("vm_dev->vdev.id.device=%d, vendor=0x%x\n", vm_dev->vdev.id.device, vm_dev->vdev.id.vendor);	// (3, 0x4d564b4c), (2, 0x4d564b4c), 0x4d564b4c define by kvmtool
 	writel(PAGE_SIZE, vm_dev->base + VIRTIO_MMIO_GUEST_PAGE_SIZE);
 
-	platform_set_drvdata(pdev, vm_dev);
-
+	platform_set_drvdata(pdev, vm_dev);		// dev->p->driver_data = data;
 	return register_virtio_device(&vm_dev->vdev);
 }
 

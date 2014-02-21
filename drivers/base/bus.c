@@ -298,9 +298,9 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 			     (start ? &start->p->knode_bus : NULL));
 	while ((dev = next_device(&i)) && !error) {
 		if(!dev->init_name)
-			printk("dev's kobj->name=%s\n", dev->kobj.name);	
+			printk("dev's kobj->name=%s ... ", dev->kobj.name);	
 		else
-			printk("dev's init_name=%s\n", dev->init_name);
+			printk("dev's init_name=%s ... ", dev->init_name);
 		error = fn(dev, data);
 	}
 	klist_iter_exit(&i);

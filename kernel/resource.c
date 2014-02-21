@@ -1206,7 +1206,7 @@ struct resource * __devm_request_region(struct device *dev,
 	dr->start = start;
 	dr->n = n;
 
-	res = __request_region(parent, start, n, name, 0);
+	res = __request_region(parent, start, n, name, 0);	// check whether this region can be used
 	if (res)
 		devres_add(dev, dr);
 	else
