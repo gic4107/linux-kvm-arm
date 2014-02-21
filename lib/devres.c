@@ -27,7 +27,7 @@ void __iomem *devm_ioremap(struct device *dev, resource_size_t offset,
 {
 	void __iomem **ptr, *addr;
 
-	ptr = devres_alloc(devm_ioremap_release, sizeof(*ptr), GFP_KERNEL);
+	ptr = devres_alloc(devm_ioremap_release, sizeof(*ptr), GFP_KERNEL);	// only return dr->data
 	if (!ptr)
 		return NULL;
 

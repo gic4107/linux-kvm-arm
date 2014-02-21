@@ -450,7 +450,7 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem)
 		return -EINVAL;
-
+printk("pdev->name=%s\n", pdev->name);	// 10000.virtio
 	if (!devm_request_mem_region(&pdev->dev, mem->start,
 			resource_size(mem), pdev->name))
 		return -EBUSY;

@@ -297,7 +297,10 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 	klist_iter_init_node(&bus->p->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
 	while ((dev = next_device(&i)) && !error) {
-		printk("dev's init_name=%s\n", dev->init_name);
+		if(!dev->init_name)
+			printk("dev's kobj->name=%s\n", dev->kobj.name);	
+		else
+			printk("dev's init_name=%s\n", dev->init_name);
 		error = fn(dev, data);
 	}
 	klist_iter_exit(&i);
@@ -494,6 +497,7 @@ static void device_remove_attrs(struct bus_type *bus, struct device *dev)
  */
 int bus_add_device(struct device *dev)
 {
+printk("bus_add_device: %s\n", dev->kobj.name);
 	struct bus_type *bus = bus_get(dev->bus);
 	int error = 0;
 

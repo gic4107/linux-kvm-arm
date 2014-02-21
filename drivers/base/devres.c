@@ -118,7 +118,7 @@ void * __devres_alloc(dr_release_t release, size_t size, gfp_t gfp,
 	return dr->data;
 }
 EXPORT_SYMBOL_GPL(__devres_alloc);
-#else
+#else		// here
 /**
  * devres_alloc - Allocate device resource data
  * @release: Release function devres will be associated with

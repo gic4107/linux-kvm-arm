@@ -452,7 +452,7 @@ static int __driver_attach(struct device *dev, void *data)
 
 	if (!driver_match_device(drv, dev))	// return 1 if match
 		return 0;
-
+printk("%s match\n", dev->kobj.name);
 	if (dev->parent)	/* Needed for USB */
 		device_lock(dev->parent);
 	device_lock(dev);
