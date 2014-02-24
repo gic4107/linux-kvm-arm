@@ -422,7 +422,7 @@ static void virtblk_update_cache_mode(struct virtio_device *vdev)
 	struct virtio_blk *vblk = vdev->priv;
 
 	if (writeback)
-		blk_queue_flush(vblk->disk->queue, REQ_FLUSH);
+		blk_queue_flush(vblk->disk->queue, REQ_FLUSH);	// configure queue's cache flush capability
 	else
 		blk_queue_flush(vblk->disk->queue, 0);
 
@@ -552,11 +552,11 @@ printk("virtblk_probe\n");
 		goto out_free_vq;
 	}
 
-	virtio_mq_reg.cmd_size =
+	virtio_mq_reg.cmd_size =			// mq: message queue
 		sizeof(struct virtblk_req) +
 		sizeof(struct scatterlist) * sg_elems;
 
-	q = vblk->disk->queue = blk_mq_init_queue(&virtio_mq_reg, vblk);
+	q = vblk->disk->queue = blk_mq_init_queue(&virtio_mq_reg, vblk);	// virtio_mq_reg contains ops to handle queue request
 	if (!q) {
 		err = -ENOMEM;
 		goto out_put_disk;
@@ -647,11 +647,11 @@ printk("virtblk_probe\n");
 		blk_queue_io_opt(q, blk_size * opt_io_size);
 
 	add_disk(vblk->disk);
-	err = device_create_file(disk_to_dev(vblk->disk), &dev_attr_serial);
+	err = device_create_file(disk_to_dev(vblk->disk), &dev_attr_serial);	// create sysfs attribute file for device.
 	if (err)
 		goto out_del_disk;
 
-	if (virtio_has_feature(vdev, VIRTIO_BLK_F_CONFIG_WCE))
+	if (virtio_has_feature(vdev, VIRTIO_BLK_F_CONFIG_WCE))		// writeback or not
 		err = device_create_file(disk_to_dev(vblk->disk),
 					 &dev_attr_cache_type_rw);
 	else
