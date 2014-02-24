@@ -279,7 +279,7 @@ ssize_t disk_image__read(struct disk_image *disk, u64 sector,
 		}
 	}
 
-	if (!disk->async && disk->disk_req_cb)
+	if (!disk->async && disk->disk_req_cb)	// yes
 		disk->disk_req_cb(param, total);
 
 	return total;

@@ -70,7 +70,7 @@ void virtio_blk_complete(void *param, long len)
 	*status	= (len < 0) ? VIRTIO_BLK_S_IOERR : VIRTIO_BLK_S_OK;
 
 	mutex_lock(&bdev->mutex);
-	virt_queue__set_used_elem(req->vq, req->head, len);
+	virt_queue__set_used_elem(req->vq, req->head, len);	// add used ring
 	mutex_unlock(&bdev->mutex);
 
 	if (virtio_queue__should_signal(&bdev->vqs[queueid]))
@@ -90,8 +90,8 @@ static void virtio_blk_do_io_request(struct kvm *kvm, struct blk_dev_req *req)
 	iov		= req->iov;
 	out		= req->out;
 	in		= req->in;
-	req_hdr		= iov[0].iov_base;
-
+	req_hdr		= iov[0].iov_base;	// iov[0] is description table's head, contains vbr->out_hdr
+printf("req_hdr->type=%d\n", req_hdr->type);
 	switch (req_hdr->type) {
 	case VIRTIO_BLK_T_IN:
 		block_cnt = disk_image__read(bdev->disk, req_hdr->sector,
@@ -124,12 +124,12 @@ static void virtio_blk_do_io(struct kvm *kvm, struct virt_queue *vq, struct blk_
 	u16 head;
 
 	while (virt_queue__available(vq)) {
-		head		= virt_queue__pop(vq);
+		head		= virt_queue__pop(vq);		// index to available description table
 		req		= &bdev->reqs[head];
 		req->head	= virt_queue__get_head_iov(vq, req->iov, &req->out,
-					&req->in, head, kvm);
+					&req->in, head, kvm);	// fill req->iov to desc. table and modify req->out, req->in
 		req->vq		= vq;
-
+printf("out:%d in:%d ... ", req->out, req->in);
 		virtio_blk_do_io_request(kvm, req);
 	}
 }

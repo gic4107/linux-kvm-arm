@@ -26,7 +26,8 @@ struct virt_queue {
 
 static inline u16 virt_queue__pop(struct virt_queue *queue)
 {
-	return queue->vring.avail->ring[queue->last_avail_idx++ % queue->vring.num];
+	// return index to available description table
+	return queue->vring.avail->ring[queue->last_avail_idx++ % queue->vring.num];	
 }
 
 static inline struct vring_desc *virt_queue__get_desc(struct virt_queue *queue, u16 desc_ndx)
@@ -38,7 +39,6 @@ static inline bool virt_queue__available(struct virt_queue *vq)
 {
 	if (!vq->vring.avail)
 		return 0;
-
 	vring_avail_event(&vq->vring) = vq->last_avail_idx;
 	return vq->vring.avail->idx !=  vq->last_avail_idx;
 }
