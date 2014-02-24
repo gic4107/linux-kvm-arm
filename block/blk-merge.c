@@ -144,10 +144,10 @@ new_segment:
 			 * sg_init_table() in drivers for each command.
 			 */
 			sg_unmark_end(*sg);
-			*sg = sg_next(*sg);
+			*sg = sg_next(*sg);	// return the next scatterlist entry in a list
 		}
 
-		sg_set_page(*sg, bvec->bv_page, nbytes, bvec->bv_offset);
+		sg_set_page(*sg, bvec->bv_page, nbytes, bvec->bv_offset);	// Set sg entry to point at given page
 		(*nsegs)++;
 	}
 	*bvprv = bvec;
@@ -166,14 +166,14 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 	int nsegs, cluster;
 
 	nsegs = 0;
-	cluster = blk_queue_cluster(q);
+	cluster = blk_queue_cluster(q);		// kind of queue limit
 
 	/*
 	 * for each bio in rq
 	 */
 	bvprv = NULL;
 	sg = NULL;
-	rq_for_each_segment(bvec, rq, iter) {
+	rq_for_each_segment(bvec, rq, iter) {	// bvec is segment
 		__blk_segment_map_sg(q, bvec, sglist, &bvprv, &sg,
 				     &nsegs, &cluster);
 	} /* segments in rq */

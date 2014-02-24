@@ -76,7 +76,7 @@ static int __virtblk_add_req(struct virtqueue *vq,
 	unsigned int num_out = 0, num_in = 0;
 	int type = vbr->out_hdr.type & ~VIRTIO_BLK_T_OUT;
 
-	sg_init_one(&hdr, &vbr->out_hdr, sizeof(vbr->out_hdr));
+	sg_init_one(&hdr, &vbr->out_hdr, sizeof(vbr->out_hdr));	// out_hdr contains info about whether this request do read or write
 	sgs[num_out++] = &hdr;
 
 	/*
@@ -91,7 +91,7 @@ static int __virtblk_add_req(struct virtqueue *vq,
 	}
 
 	if (have_data) {
-		if (vbr->out_hdr.type & VIRTIO_BLK_T_OUT)
+		if (vbr->out_hdr.type & VIRTIO_BLK_T_OUT)	// request write
 			sgs[num_out++] = data_sg;
 		else
 			sgs[num_out + num_in++] = data_sg;
@@ -162,10 +162,10 @@ static int virtio_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *req)
 	BUG_ON(req->nr_phys_segments + 2 > vblk->sg_elems);
 
 	vbr->req = req;
-	if (req->cmd_flags & REQ_FLUSH) {
+	if (req->cmd_flags & REQ_FLUSH) {	// here 
 		vbr->out_hdr.type = VIRTIO_BLK_T_FLUSH;
 		vbr->out_hdr.sector = 0;
-		vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);
+		vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);		// return req->ioprio;
 	} else {
 		switch (req->cmd_type) {
 		case REQ_TYPE_FS:
@@ -174,6 +174,7 @@ static int virtio_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *req)
 			vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);
 			break;
 		case REQ_TYPE_BLOCK_PC:
+			printk("REQ_TYPE_BLOCK_SCSI\n");		// no (only sure in simple shell file edit)
 			vbr->out_hdr.type = VIRTIO_BLK_T_SCSI_CMD;
 			vbr->out_hdr.sector = 0;
 			vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);
@@ -202,7 +203,7 @@ static int virtio_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *req)
 		virtqueue_kick(vblk->vq);
 		spin_unlock_irqrestore(&vblk->vq_lock, flags);
 		blk_mq_stop_hw_queue(hctx);
-		return BLK_MQ_RQ_QUEUE_BUSY;
+		return BLK_MQ_RQ_QUEUE_BUSY;	/* requeue IO for later */
 	}
 
 	if (last)
@@ -576,7 +577,7 @@ printk("virtblk_probe\n");
 	vblk->index = index;
 
 	/* configure queue flush support */
-	virtblk_update_cache_mode(vdev);
+	virtblk_update_cache_mode(vdev);	// yes, host feature has VIRTIO_BLK_F_WCE
 
 	/* If disk is read-only in the host, the guest should obey */
 	if (virtio_has_feature(vdev, VIRTIO_BLK_F_RO))

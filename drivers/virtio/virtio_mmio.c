@@ -244,7 +244,7 @@ static irqreturn_t vm_interrupt(int irq, void *opaque)
 	status = readl(vm_dev->base + VIRTIO_MMIO_INTERRUPT_STATUS);
 	writel(status, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
 
-	if (unlikely(status & VIRTIO_MMIO_INT_CONFIG)
+	if (unlikely(status & VIRTIO_MMIO_INT_CONFIG)		// only balloon do something
 			&& vdrv && vdrv->config_changed) {
 		vdrv->config_changed(&vm_dev->vdev);
 		ret = IRQ_HANDLED;

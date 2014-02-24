@@ -686,7 +686,7 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 			return -EINVAL;
 
 		return kvm_vgic_inject_irq(kvm, vcpu->vcpu_id, irq_num, level);
-	case KVM_ARM_IRQ_TYPE_SPI:
+	case KVM_ARM_IRQ_TYPE_SPI:	// here to handle VIRTIO_IRQ
 		if (!irqchip_in_kernel(kvm))
 			return -ENXIO;
 

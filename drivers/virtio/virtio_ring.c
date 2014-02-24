@@ -220,7 +220,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 
 	/* If the host supports indirect descriptor tables, and we have multiple
 	 * buffers, then go indirect. FIXME: tune this threshold */
-	if (vq->indirect && total_sg > 1 && vq->vq.num_free) {
+	if (vq->indirect && total_sg > 1 && vq->vq.num_free) {	// no indirect in virtblk
 		head = vring_add_indirect(vq, sgs, next, total_sg, total_out,
 					  total_in,
 					  out_sgs, in_sgs, gfp);
@@ -247,13 +247,16 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	vq->vq.num_free -= total_sg;
 
 	head = i = vq->free_head;
+/*
+	sg for out is front of sg for in
+*/
 	for (n = 0; n < out_sgs; n++) {
 		for (sg = sgs[n]; sg; sg = next(sg, &total_out)) {
 			vq->vring.desc[i].flags = VRING_DESC_F_NEXT;
 			vq->vring.desc[i].addr = sg_phys(sg);
 			vq->vring.desc[i].len = sg->length;
 			prev = i;
-			i = vq->vring.desc[i].next;
+			i = vq->vring.desc[i].next;	// initialize to be sequent in vring_new_virtqueue
 		}
 	}
 	for (; n < (out_sgs + in_sgs); n++) {
@@ -266,18 +269,18 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		}
 	}
 	/* Last one doesn't continue. */
-	vq->vring.desc[prev].flags &= ~VRING_DESC_F_NEXT;
+	vq->vring.desc[prev].flags &= ~VRING_DESC_F_NEXT;	// here use prev to set no next
 
 	/* Update free pointer */
 	vq->free_head = i;
 
 add_head:
 	/* Set token. */
-	vq->data[head] = data;
+	vq->data[head] = data;		// data is vbr
 
 	/* Put entry in available array (but don't update avail->idx until they
 	 * do sync). */
-	avail = (vq->vring.avail->idx & (vq->vring.num-1));
+	avail = (vq->vring.avail->idx & (vq->vring.num-1));	// vring.num is the number of desc, and number of ring in avail
 	vq->vring.avail->ring[avail] = head;
 
 	/* Descriptors and available array need to be set before we expose the
@@ -414,7 +417,7 @@ bool virtqueue_kick_prepare(struct virtqueue *_vq)
 	vq->last_add_time_valid = false;
 #endif
 
-	if (vq->event) {
+	if (vq->event) {	// false in virtblk
 		needs_kick = vring_need_event(vring_avail_event(&vq->vring),
 					      new, old);
 	} else {
@@ -441,7 +444,7 @@ bool virtqueue_notify(struct virtqueue *_vq)
 		return false;
 
 	/* Prod other side to tell it about changes. */
-	if (!vq->notify(_vq)) {
+	if (!vq->notify(_vq)) {		// write vq->index to MMIO_NOTIFY_ADDRESS, vq->index indicate which virtqueue of this device be notified
 		vq->broken = true;
 		return false;
 	}

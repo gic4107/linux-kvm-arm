@@ -56,7 +56,7 @@ struct sg_table {
  **/
 static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 {
-	unsigned long page_link = sg->page_link & 0x3;
+	unsigned long page_link = sg->page_link & 0x3;	// translation table descriptor end with 0x3 means point to a table
 
 	/*
 	 * In order for the low bit stealing approach to work, pages
