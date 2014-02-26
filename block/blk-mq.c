@@ -600,7 +600,6 @@ static void __blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx)
 		 */
 		if (list_empty(&rq_list))
 			rq->cmd_flags |= REQ_END;
-
 		ret = q->mq_ops->queue_rq(hctx, rq);
 		switch (ret) {
 		case BLK_MQ_RQ_QUEUE_OK:
@@ -912,7 +911,7 @@ static void blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	 * If we have multiple hardware queues, just go directly to
 	 * one of those for sync IO.
 	 */
-	use_plug = !is_flush_fua && ((q->nr_hw_queues == 1) || !is_sync);
+	use_plug = !is_flush_fua && ((q->nr_hw_queues == 1) || !is_sync);	// nr_hw_queue=1 in virtblk
 
 	blk_queue_bounce(q, &bio);
 
@@ -925,7 +924,7 @@ static void blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	}
 
 	ctx = blk_mq_get_ctx(q);
-	hctx = q->mq_ops->map_queue(q, ctx->cpu);
+	hctx = q->mq_ops->map_queue(q, ctx->cpu);	/* hw dispatch queues */
 
 	trace_block_getrq(q, bio, rw);
 	rq = __blk_mq_alloc_request(hctx, GFP_ATOMIC, false);
@@ -998,7 +997,7 @@ run_queue:
  */
 struct blk_mq_hw_ctx *blk_mq_map_queue(struct request_queue *q, const int cpu)
 {
-	return q->queue_hw_ctx[q->mq_map[cpu]];
+	return q->queue_hw_ctx[q->mq_map[cpu]];	/* hw dispatch queues */
 }
 EXPORT_SYMBOL(blk_mq_map_queue);
 

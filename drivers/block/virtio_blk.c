@@ -558,6 +558,7 @@ printk("virtblk_probe\n");
 		sizeof(struct scatterlist) * sg_elems;
 
 	q = vblk->disk->queue = blk_mq_init_queue(&virtio_mq_reg, vblk);	// virtio_mq_reg contains ops to handle queue request
+					// blk_queue_make_request to request callback for this queue
 	if (!q) {
 		err = -ENOMEM;
 		goto out_put_disk;
