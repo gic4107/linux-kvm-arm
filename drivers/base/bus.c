@@ -497,7 +497,7 @@ static void device_remove_attrs(struct bus_type *bus, struct device *dev)
  */
 int bus_add_device(struct device *dev)
 {
-printk("bus_add_device: %s\n", dev->kobj.name);
+//printk("bus_add_device: %s\n", dev->kobj.name);
 	struct bus_type *bus = bus_get(dev->bus);
 	int error = 0;
 

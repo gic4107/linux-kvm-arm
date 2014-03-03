@@ -67,9 +67,10 @@ struct resource *platform_get_resource(struct platform_device *dev,
     for (i = 0; i < dev->num_resources; i++) {                                   
         struct resource *r = &dev->resource[i];                                  
         printk("resource: start=0x%x, end=0x%x, name=%s, type=0x%x\n", r->start, r->end, r->name, resource_type(r));
-		// resource: start=0x10000, end=0x101ff, name=/virtio@10000, type=0x200
-		// resource: start=0x25, end=0x25, name=/virtio@10000, type=0x400
+//		 resource: start=0x10000, end=0x101ff, name=/virtio@10000, type=0x200
+//		 resource: start=0x25, end=0x25, name=/virtio@10000, type=0x400
     }   
+
 
 	for (i = 0; i < dev->num_resources; i++) {
 		struct resource *r = &dev->resource[i];
@@ -282,7 +283,7 @@ EXPORT_SYMBOL_GPL(platform_device_add_data);
  */
 int platform_device_add(struct platform_device *pdev)
 {
-printk("platform_device_add, name=%s\n", pdev->name);
+//printk("platform_device_add, name=%s\n", pdev->name);
 	int i, ret;
 
 	if (!pdev)
@@ -539,7 +540,7 @@ static void platform_drv_shutdown(struct device *_dev)
 int __platform_driver_register(struct platform_driver *drv,
 				struct module *owner)
 {
-printk(" === start platform_driver_register:%s === \n", drv->driver.name);
+//printk(" === start platform_driver_register:%s === \n", drv->driver.name);
 	drv->driver.owner = owner;
 	drv->driver.bus = &platform_bus_type;
 	if (drv->probe)
@@ -550,7 +551,7 @@ printk(" === start platform_driver_register:%s === \n", drv->driver.name);
 		drv->driver.shutdown = platform_drv_shutdown;
 
 	int tmp = driver_register(&drv->driver);
-	printk(" === platform_driver_register finish ===\n");
+//	printk(" === platform_driver_register finish ===\n");
 	return tmp;
 //	return driver_register(&drv->driver);
 }

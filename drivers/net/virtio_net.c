@@ -1614,8 +1614,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 	dev->vlan_features = dev->features;
 
 	/* Configuration may specify what MAC to use.  Otherwise random. */
-	if (virtio_has_feature(vdev, VIRTIO_NET_F_MAC))
-		virtio_cread_bytes(vdev,
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_MAC))		// Device has given MAC address
+		virtio_cread_bytes(vdev,	// set MAC to dev->dev_addr
 				   offsetof(struct virtio_net_config, mac),
 				   dev->dev_addr, dev->addr_len);
 	else
