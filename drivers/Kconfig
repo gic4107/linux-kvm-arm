@@ -170,4 +170,6 @@ source "drivers/phy/Kconfig"
 
 source "drivers/powercap/Kconfig"
 
+#gic4107
+source "drivers/vhost/Kconfig"
 endmenu

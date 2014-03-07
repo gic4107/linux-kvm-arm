@@ -1437,7 +1437,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	 * possible control vq.
 	 */
 	total_vqs = vi->max_queue_pairs * 2 +
-		    virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ);
+		    virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ);		// yes, there is a control vq
 
 	/* Allocate space for find_vqs parameters */
 	vqs = kzalloc(total_vqs * sizeof(*vqs), GFP_KERNEL);
@@ -1502,10 +1502,10 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 {
 	int i;
 
-	vi->sq = kzalloc(sizeof(*vi->sq) * vi->max_queue_pairs, GFP_KERNEL);
+	vi->sq = kzalloc(sizeof(*vi->sq) * vi->max_queue_pairs, GFP_KERNEL);	// send queue
 	if (!vi->sq)
 		goto err_sq;
-	vi->rq = kzalloc(sizeof(*vi->rq) * vi->max_queue_pairs, GFP_KERNEL);
+	vi->rq = kzalloc(sizeof(*vi->rq) * vi->max_queue_pairs, GFP_KERNEL);	// receive queue
 	if (!vi->rq)
 		goto err_rq;
 
@@ -1532,11 +1532,11 @@ static int init_vqs(struct virtnet_info *vi)
 	int ret;
 
 	/* Allocate send & receive queues */
-	ret = virtnet_alloc_queues(vi);
+	ret = virtnet_alloc_queues(vi);		// allocate send/receive queue
 	if (ret)
 		goto err;
 
-	ret = virtnet_find_vqs(vi);
+	ret = virtnet_find_vqs(vi);		// allocate virtqueue for send/receive queue
 	if (ret)
 		goto err_free;
 
@@ -1698,7 +1698,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	   otherwise get link status from config. */
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_STATUS)) {
 		netif_carrier_off(dev);
-		schedule_work(&vi->config_work);
+		schedule_work(&vi->config_work);	// put work task in global workqueue
 	} else {
 		vi->status = VIRTIO_NET_S_LINK_UP;
 		netif_carrier_on(dev);

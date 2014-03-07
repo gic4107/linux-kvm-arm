@@ -143,7 +143,7 @@ static void virtblk_done(struct virtqueue *vq)
 		}
 		if (unlikely(virtqueue_is_broken(vq)))
 			break;
-	} while (!virtqueue_enable_cb(vq));
+	} while (!virtqueue_enable_cb(vq));		// returns "false" if there are pending buffers in the queue
 	spin_unlock_irqrestore(&vblk->vq_lock, flags);
 
 	/* In case queue is stopped waiting for more buffers. */
