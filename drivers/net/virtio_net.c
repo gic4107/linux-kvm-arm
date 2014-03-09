@@ -213,13 +213,14 @@ static struct page *get_a_page(struct receive_queue *rq, gfp_t gfp_mask)
 
 static void skb_xmit_done(struct virtqueue *vq)
 {
+printk("skb_xmit_done\n");
 	struct virtnet_info *vi = vq->vdev->priv;
 
 	/* Suppress further interrupts. */
 	virtqueue_disable_cb(vq);
 
 	/* We were probably waiting for more output buffers. */
-	netif_wake_subqueue(vi->dev, vq2txq(vq));
+	netif_wake_subqueue(vi->dev, vq2txq(vq));	// allow sending packets on subqueue
 }
 
 /* Called from bottom half context */
@@ -640,6 +641,7 @@ static bool try_fill_recv(struct receive_queue *rq, gfp_t gfp)
 
 static void skb_recv_done(struct virtqueue *rvq)
 {
+printk("skb_recv_done\n");
 	struct virtnet_info *vi = rvq->vdev->priv;
 	struct receive_queue *rq = &vi->rq[vq2rxq(rvq)];
 
@@ -747,7 +749,8 @@ static void free_old_xmit_skbs(struct send_queue *sq)
 	struct virtnet_info *vi = sq->vq->vdev->priv;
 	struct virtnet_stats *stats = this_cpu_ptr(vi->stats);
 
-	while ((skb = virtqueue_get_buf(sq->vq, &len)) != NULL) {
+	while ((skb = virtqueue_get_buf(sq->vq, &len)) != NULL) {	// get used buf
+		printk("free_old_xmit\n");
 		pr_debug("Sent skb %p\n", skb);
 
 		u64_stats_update_begin(&stats->tx_syncp);
@@ -828,8 +831,9 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 
 static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+printk("start_xmit ... \n");
 	struct virtnet_info *vi = netdev_priv(dev);
-	int qnum = skb_get_queue_mapping(skb);
+	int qnum = skb_get_queue_mapping(skb);		// Queue mapping for multiqueue devices
 	struct send_queue *sq = &vi->sq[qnum];
 	int err;
 
@@ -837,7 +841,7 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	free_old_xmit_skbs(sq);
 
 	/* Try to transmit */
-	err = xmit_skb(sq, skb);
+	err = xmit_skb(sq, skb);	// virtqueue_add_outbuf
 
 	/* This should not happen! */
 	if (unlikely(err) || unlikely(!virtqueue_kick(sq->vq))) {
@@ -857,7 +861,7 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Apparently nice girls don't return TX_BUSY; stop the queue
 	 * before it gets out of hand.  Naturally, this wastes entries. */
 	if (sq->vq->num_free < 2+MAX_SKB_FRAGS) {
-		netif_stop_subqueue(dev, qnum);
+		netif_stop_subqueue(dev, qnum);		// stop sending packets on subqueue
 		if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {
 			/* More just got used, free them then recheck. */
 			free_old_xmit_skbs(sq);
@@ -1307,7 +1311,7 @@ static int virtnet_change_mtu(struct net_device *dev, int new_mtu)
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
-	.ndo_start_xmit      = start_xmit,
+	.ndo_start_xmit      = start_xmit,			// key tx function 
 	.ndo_validate_addr   = eth_validate_addr,
 	.ndo_set_mac_address = virtnet_set_mac_address,
 	.ndo_set_rx_mode     = virtnet_set_rx_mode,

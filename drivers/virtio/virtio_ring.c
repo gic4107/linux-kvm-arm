@@ -777,6 +777,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 		return NULL;
 
 	vring_init(&vq->vring, num, pages, vring_align);
+	printk("vr->desc=0x%x, vr->avail=0x%x, vr->used=0x%x\n", vq->vring.desc, vq->vring.avail, vq->vring.used);
 	vq->vq.callback = callback;
 	vq->vq.vdev = vdev;
 	vq->vq.name = name;
