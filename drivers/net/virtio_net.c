@@ -181,7 +181,7 @@ static int rxq2vq(int rxq)
 
 static inline struct skb_vnet_hdr *skb_vnet_hdr(struct sk_buff *skb)
 {
-	return (struct skb_vnet_hdr *)skb->cb;
+	return (struct skb_vnet_hdr *)skb->cb;		// control buffer, private for each layer to use
 }
 
 /*
@@ -753,7 +753,7 @@ static void free_old_xmit_skbs(struct send_queue *sq)
 		printk("free_old_xmit\n");
 		pr_debug("Sent skb %p\n", skb);
 
-		u64_stats_update_begin(&stats->tx_syncp);
+		u64_stats_update_begin(&stats->tx_syncp);		// Active statistics
 		stats->tx_bytes += skb->len;
 		stats->tx_packets++;
 		u64_stats_update_end(&stats->tx_syncp);
@@ -772,7 +772,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	bool can_push;
 
 	pr_debug("%s: xmit %p %pM\n", vi->dev->name, skb, dest);
-	if (vi->mergeable_rx_bufs)
+	if (vi->mergeable_rx_bufs)		// true in probe
 		hdr_len = sizeof hdr->mhdr;
 	else
 		hdr_len = sizeof hdr->hdr;
@@ -787,7 +787,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	else
 		hdr = skb_vnet_hdr(skb);
 
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {	// HW for data link layer csum 
 		hdr->hdr.flags = VIRTIO_NET_HDR_F_NEEDS_CSUM;
 		hdr->hdr.csum_start = skb_checksum_start_offset(skb);
 		hdr->hdr.csum_offset = skb->csum_offset;
@@ -817,8 +817,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	if (vi->mergeable_rx_bufs)
 		hdr->mhdr.num_buffers = 0;
 
-	if (can_push) {
-		__skb_push(skb, hdr_len);
+	if (can_push) {		// hdr is used only when use GSO and CSUM features
+		__skb_push(skb, hdr_len);	// push data up for head
 		num_sg = skb_to_sgvec(skb, sq->sg, 0, skb->len);
 		/* Pull header back to avoid skew in tx bytes calculations. */
 		__skb_pull(skb, hdr_len);
@@ -834,17 +834,18 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 printk("start_xmit ... \n");
 	struct virtnet_info *vi = netdev_priv(dev);
 	int qnum = skb_get_queue_mapping(skb);		// Queue mapping for multiqueue devices
+//printk("qnum=%d\n", qnum);	// should be same, all 0
 	struct send_queue *sq = &vi->sq[qnum];
 	int err;
 
 	/* Free up any pending old buffers before queueing new ones. */
-	free_old_xmit_skbs(sq);
+	free_old_xmit_skbs(sq);				// handle used buffer
 
 	/* Try to transmit */
-	err = xmit_skb(sq, skb);	// virtqueue_add_outbuf
+	err = xmit_skb(sq, skb);			// virtqueue_add_outbuf but no kick?
 
 	/* This should not happen! */
-	if (unlikely(err) || unlikely(!virtqueue_kick(sq->vq))) {
+	if (unlikely(err) || unlikely(!virtqueue_kick(sq->vq))) {	// kick here
 		dev->stats.tx_fifo_errors++;
 		if (net_ratelimit())
 			dev_warn(&dev->dev,
@@ -855,8 +856,8 @@ printk("start_xmit ... \n");
 	}
 
 	/* Don't wait up for transmitted skbs to be freed. */
-	skb_orphan(skb);
-	nf_reset(skb);
+	skb_orphan(skb);		// make skb unowned
+	nf_reset(skb);			// reset net filter
 
 	/* Apparently nice girls don't return TX_BUSY; stop the queue
 	 * before it gets out of hand.  Naturally, this wastes entries. */

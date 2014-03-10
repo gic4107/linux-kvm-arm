@@ -3170,21 +3170,35 @@ void __init skb_init(void)
 static int
 __skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg, int offset, int len)
 {
+printk("skb->len=%d, skb->data_len=%d, skb->headlen=%d\n", skb->len, skb->data_len, skb->len-skb->data_len);		// skb->data_len=0 in ping
+/*	ping -c 3
+skb->len=42, skb->data_len=0, skb->headlen=42
+skb->len=98, skb->data_len=0, skb->headlen=98
+skb->len=98, skb->data_len=0, skb->headlen=98
+skb->len=98, skb->data_len=0, skb->headlen=98
+*/
+printk("head-end=0x%x, data-tail=0x%x, sizeof(skb_shared_info)=%d\n", skb->head-skb->end, skb->data-skb->tail, sizeof(struct skb_shared_info));
+//head-end=0x1ae63d40, data-tail=0x1ae63dd6, sizeof(skb_shared_info)=320
+printk("head=0x%x, end=0x%x, data=0x%x, tail=0x%x\n", skb->head, skb->end, skb->data, skb->tail);
+// head=0x1ae63e00, end=0xc0, data=0x1ae63e02, tail=0x2c
+printk("head=0x%x, end=0x%x, data=0x%x, tail=0x%x\n", (void*)skb->head, (void*)skb->end, (void*)skb->data, (void*)skb->tail);
+printk("head=0x%x, end=0x%x, data=0x%x, tail=0x%x\n", (unsigned char*)skb->head, (unsigned char*)skb->end, (unsigned char*)skb->data, (unsigned char*)skb->tail);
 	int start = skb_headlen(skb);
 	int i, copy = start - offset;
 	struct sk_buff *frag_iter;
-	int elt = 0;
+	int elt = 0;			// scatterlist array index
 
-	if (copy > 0) {
+	if (copy > 0) {			
 		if (copy > len)
 			copy = len;
-		sg_set_buf(sg, skb->data + offset, copy);
+		sg_set_buf(sg, skb->data + offset, copy);	// only copy data, no add head!!
+								// data link layer head left for BE?
 		elt++;
 		if ((len -= copy) == 0)
-			return elt;
+			return elt;	// return here when ping
 		offset += copy;
 	}
-
+printk("nr_frags=%d\n", skb_shinfo(skb)->nr_frags);
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		int end;
 

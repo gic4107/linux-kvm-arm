@@ -220,7 +220,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 
 	/* If the host supports indirect descriptor tables, and we have multiple
 	 * buffers, then go indirect. FIXME: tune this threshold */
-	if (vq->indirect && total_sg > 1 && vq->vq.num_free) {	// no indirect in virtblk
+	if (vq->indirect && total_sg > 1 && vq->vq.num_free) {	// no indirect in virtblk, virtnet
 		head = vring_add_indirect(vq, sgs, next, total_sg, total_out,
 					  total_in,
 					  out_sgs, in_sgs, gfp);
@@ -276,7 +276,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 
 add_head:
 	/* Set token. */
-	vq->data[head] = data;		// data is vbr
+	vq->data[head] = data;		// data is vbr or skb
 
 	/* Put entry in available array (but don't update avail->idx until they
 	 * do sync). */

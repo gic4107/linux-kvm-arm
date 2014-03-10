@@ -333,7 +333,7 @@ enum {
 
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 typedef unsigned int sk_buff_data_t;
-#else
+#else		// here
 typedef unsigned char *sk_buff_data_t;
 #endif
 
@@ -519,7 +519,7 @@ struct sk_buff {
 	__u16			network_header;
 	__u16			mac_header;
 	/* These elements must be at the end, see alloc_skb() for details.  */
-	sk_buff_data_t		tail;
+	sk_buff_data_t		tail;	// unsigned char*
 	sk_buff_data_t		end;
 	unsigned char		*head,
 				*data;
@@ -2606,14 +2606,14 @@ static inline void nf_bridge_get(struct nf_bridge_info *nf_bridge)
 	if (nf_bridge)
 		atomic_inc(&nf_bridge->use);
 }
-#endif /* CONFIG_BRIDGE_NETFILTER */
+#endif /* CONFIG_BRIDGE_NETFILTER */	
 static inline void nf_reset(struct sk_buff *skb)
 {
-#if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+#if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)		// no
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
 #endif
-#ifdef CONFIG_BRIDGE_NETFILTER
+#ifdef CONFIG_BRIDGE_NETFILTER		// no
 	nf_bridge_put(skb->nf_bridge);
 	skb->nf_bridge = NULL;
 #endif
