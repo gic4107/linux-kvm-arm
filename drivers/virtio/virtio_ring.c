@@ -654,7 +654,8 @@ EXPORT_SYMBOL_GPL(virtqueue_poll);
  */
 bool virtqueue_enable_cb(struct virtqueue *_vq)
 {
-	unsigned last_used_idx = virtqueue_enable_cb_prepare(_vq);
+	unsigned last_used_idx = virtqueue_enable_cb_prepare(_vq);	// return vq->last_used_idx
+					// vq->last_used_idx will increase in virtqueue_get_buf
 	return !virtqueue_poll(_vq, last_used_idx);
 }
 EXPORT_SYMBOL_GPL(virtqueue_enable_cb);

@@ -499,7 +499,7 @@ static void receive_buf(struct receive_queue *rq, void *buf, unsigned int len)
 		skb_shinfo(skb)->gso_segs = 0;
 	}
 
-	netif_receive_skb(skb);
+	netif_receive_skb(skb);		// push upper layer
 	return;
 
 frame_err:
@@ -700,14 +700,14 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 
 again:
 	while (received < budget &&
-	       (buf = virtqueue_get_buf(rq->vq, &len)) != NULL) {
-		receive_buf(rq, buf, len);
+	       (buf = virtqueue_get_buf(rq->vq, &len)) != NULL) {	// get used buffer and increase vq->last_used_idx
+		receive_buf(rq, buf, len);		// call netif_receive_skb eventually
 		--rq->num;
 		received++;
 	}
 
 	if (rq->num < rq->max / 2) {
-		if (!try_fill_recv(rq, GFP_ATOMIC))
+		if (!try_fill_recv(rq, GFP_ATOMIC))	// such as buf allocate fail
 			schedule_delayed_work(&vi->refill, 0);
 	}
 
@@ -715,7 +715,7 @@ again:
 	if (received < budget) {
 		r = virtqueue_enable_cb_prepare(rq->vq);
 		napi_complete(napi);
-		if (unlikely(virtqueue_poll(rq->vq, r)) &&
+		if (unlikely(virtqueue_poll(rq->vq, r)) &&	// Returns "true" if there are pending used buffers in the queue.
 		    napi_schedule_prep(napi)) {
 			virtqueue_disable_cb(rq->vq);
 			__napi_schedule(napi);
@@ -862,6 +862,7 @@ printk("start_xmit ... \n");
 	/* Apparently nice girls don't return TX_BUSY; stop the queue
 	 * before it gets out of hand.  Naturally, this wastes entries. */
 	if (sq->vq->num_free < 2+MAX_SKB_FRAGS) {
+printk("sq->vq->num_free < 2+MAX_SKB_FRAGS\n");
 		netif_stop_subqueue(dev, qnum);		// stop sending packets on subqueue
 		if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {
 			/* More just got used, free them then recheck. */
@@ -1517,7 +1518,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	INIT_DELAYED_WORK(&vi->refill, refill_work);
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		vi->rq[i].pages = NULL;
-		netif_napi_add(vi->dev, &vi->rq[i].napi, virtnet_poll,
+		netif_napi_add(vi->dev, &vi->rq[i].napi, virtnet_poll,		// initialize a napi context
 			       napi_weight);
 
 		sg_init_table(vi->rq[i].sg, ARRAY_SIZE(vi->rq[i].sg));
