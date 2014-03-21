@@ -130,7 +130,7 @@ static inline
 int virtqueue_set_affinity(struct virtqueue *vq, int cpu)
 {
 	struct virtio_device *vdev = vq->vdev;
-	if (vdev->config->set_vq_affinity)
+	if (vdev->config->set_vq_affinity)	// no
 		return vdev->config->set_vq_affinity(vq, cpu);
 	return 0;
 }

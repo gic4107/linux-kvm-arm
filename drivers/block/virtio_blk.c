@@ -168,13 +168,12 @@ static int virtio_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *req)
 		vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);		// return req->ioprio;
 	} else {
 		switch (req->cmd_type) {
-		case REQ_TYPE_FS:
+		case REQ_TYPE_FS:		// or here
 			vbr->out_hdr.type = 0;
 			vbr->out_hdr.sector = blk_rq_pos(vbr->req);
 			vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);
 			break;
 		case REQ_TYPE_BLOCK_PC:
-			printk("REQ_TYPE_BLOCK_SCSI\n");		// no (only sure in simple shell file edit)
 			vbr->out_hdr.type = VIRTIO_BLK_T_SCSI_CMD;
 			vbr->out_hdr.sector = 0;
 			vbr->out_hdr.ioprio = req_get_ioprio(vbr->req);

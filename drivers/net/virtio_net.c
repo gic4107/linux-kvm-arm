@@ -750,7 +750,6 @@ static void free_old_xmit_skbs(struct send_queue *sq)
 	struct virtnet_stats *stats = this_cpu_ptr(vi->stats);
 
 	while ((skb = virtqueue_get_buf(sq->vq, &len)) != NULL) {	// get used buf
-		printk("free_old_xmit\n");
 		pr_debug("Sent skb %p\n", skb);
 
 		u64_stats_update_begin(&stats->tx_syncp);		// Active statistics
@@ -842,7 +841,7 @@ printk("start_xmit ... \n");
 	free_old_xmit_skbs(sq);				// handle used buffer
 
 	/* Try to transmit */
-	err = xmit_skb(sq, skb);			// virtqueue_add_outbuf but no kick?
+	err = xmit_skb(sq, skb);			// virtqueue_add_outbuf
 
 	/* This should not happen! */
 	if (unlikely(err) || unlikely(!virtqueue_kick(sq->vq))) {	// kick here
@@ -864,7 +863,7 @@ printk("start_xmit ... \n");
 	if (sq->vq->num_free < 2+MAX_SKB_FRAGS) {
 printk("sq->vq->num_free < 2+MAX_SKB_FRAGS\n");
 		netif_stop_subqueue(dev, qnum);		// stop sending packets on subqueue
-		if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {
+		if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {	// returns false if there are many pending buffers in the queue
 			/* More just got used, free them then recheck. */
 			free_old_xmit_skbs(sq);
 			if (sq->vq->num_free >= 2+MAX_SKB_FRAGS) {

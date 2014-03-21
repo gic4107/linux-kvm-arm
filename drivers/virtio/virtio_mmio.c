@@ -252,8 +252,9 @@ static irqreturn_t vm_interrupt(int irq, void *opaque)
 
 	if (likely(status & VIRTIO_MMIO_INT_VRING)) {
 		spin_lock_irqsave(&vm_dev->lock, flags);
-		list_for_each_entry(info, &vm_dev->virtqueues, node)
+		list_for_each_entry(info, &vm_dev->virtqueues, node) {
 			ret |= vring_interrupt(irq, info->vq);
+		}
 		spin_unlock_irqrestore(&vm_dev->lock, flags);
 	}
 
