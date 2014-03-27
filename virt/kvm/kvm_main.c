@@ -2377,6 +2377,7 @@ static long kvm_vm_ioctl(struct file *filp,
 		break;
 	}
 	case KVM_IOEVENTFD: {
+printk("KVM_IOEVENTFD\n");
 		struct kvm_ioeventfd data;
 
 		r = -EFAULT;

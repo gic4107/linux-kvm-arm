@@ -650,7 +650,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, int ioctl, void __user *argp)
 	mutex_lock(&vq->mutex);
 
 	switch (ioctl) {
-	case VHOST_SET_VRING_NUM:
+	case VHOST_SET_VRING_NUM:	// number of entry of description table
 		/* Resizing ring with an active backend?
 		 * You don't want to do that. */
 		if (vq->private_data) {

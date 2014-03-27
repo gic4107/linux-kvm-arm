@@ -746,8 +746,8 @@ kvm_assign_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 		goto unlock_fail;
 	}
 
-	kvm_iodevice_init(&p->dev, &ioeventfd_ops);
-
+	kvm_iodevice_init(&p->dev, &ioeventfd_ops);		// dev->ops = ops;
+printk("kvm_assign_ioeventfd addr=0x%X\n", p->addr);
 	ret = kvm_io_bus_register_dev(kvm, bus_idx, p->addr, p->length,
 				      &p->dev);
 	if (ret < 0)
