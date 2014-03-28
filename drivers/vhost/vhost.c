@@ -73,13 +73,13 @@ EXPORT_SYMBOL_GPL(vhost_work_init);
 void vhost_poll_init(struct vhost_poll *poll, vhost_work_fn_t fn,
 		     unsigned long mask, struct vhost_dev *dev)
 {
-	init_waitqueue_func_entry(&poll->wait, vhost_poll_wakeup);
-	init_poll_funcptr(&poll->table, vhost_poll_func);
+	init_waitqueue_func_entry(&poll->wait, vhost_poll_wakeup);	// poll's wait queue
+	init_poll_funcptr(&poll->table, vhost_poll_func);		// poll's polling table
 	poll->mask = mask;
 	poll->dev = dev;
 	poll->wqh = NULL;
 
-	vhost_work_init(&poll->work, fn);
+	vhost_work_init(&poll->work, fn);				// poll's work (do when wake up by worker thread)
 }
 EXPORT_SYMBOL_GPL(vhost_poll_init);
 
@@ -93,7 +93,7 @@ int vhost_poll_start(struct vhost_poll *poll, struct file *file)
 	if (poll->wqh)
 		return 0;
 
-	mask = file->f_op->poll(file, &poll->table);
+	mask = file->f_op->poll(file, &poll->table);	// poll->table will be filled with wqh of file 
 	if (mask)
 		vhost_poll_wakeup(&poll->wait, 0, 0, (void *)mask);
 	if (mask & POLLERR) {
