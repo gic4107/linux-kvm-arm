@@ -60,7 +60,7 @@ __u64 eventfd_signal(struct eventfd_ctx *ctx, __u64 n)
 		n = ULLONG_MAX - ctx->count;
 	ctx->count += n;
 	if (waitqueue_active(&ctx->wqh))
-		wake_up_locked_poll(&ctx->wqh, POLLIN);
+		wake_up_locked_poll(&ctx->wqh, POLLIN);	// wake up and call poll->wait->fn (vhost_poll_wakeup)
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 
 	return n;
@@ -120,10 +120,10 @@ static unsigned int eventfd_poll(struct file *file, poll_table *wait)
 	unsigned int events = 0;
 	unsigned long flags;
 
-	poll_wait(file, &ctx->wqh, wait);
+	poll_wait(file, &ctx->wqh, wait);	// call poll_table->_qproc which will add wait's wait queue to file's wqh
 
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
-	if (ctx->count > 0)
+	if (ctx->count > 0)	// count > 0 means some write happen before
 		events |= POLLIN;
 	if (ctx->count == ULLONG_MAX)
 		events |= POLLERR;

@@ -303,7 +303,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	irqfd->kvm = kvm;
 	irqfd->gsi = args->gsi;
 	INIT_LIST_HEAD(&irqfd->list);
-	INIT_WORK(&irqfd->inject, irqfd_inject);
+	INIT_WORK(&irqfd->inject, irqfd_inject);	// irqfd_inject will be called when wake up
 	INIT_WORK(&irqfd->shutdown, irqfd_shutdown);
 
 	f = fdget(args->fd);
@@ -318,7 +318,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 		goto fail;
 	}
 
-	irqfd->eventfd = eventfd;
+	irqfd->eventfd = eventfd;		// eventfd to be waited
 
 	if (args->flags & KVM_IRQFD_FLAG_RESAMPLE) {
 		struct _irqfd_resampler *resampler;
@@ -372,7 +372,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	 * Install our own custom wake-up handling so we are notified via
 	 * a callback whenever someone signals the underlying eventfd
 	 */
-	init_waitqueue_func_entry(&irqfd->wait, irqfd_wakeup);
+	init_waitqueue_func_entry(&irqfd->wait, irqfd_wakeup);		// be called when wakeup 
 	init_poll_funcptr(&irqfd->pt, irqfd_ptable_queue_proc);
 
 	spin_lock_irq(&kvm->irqfds.lock);
@@ -391,7 +391,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 					   lockdep_is_held(&kvm->irqfds.lock));
 	irqfd_update(kvm, irqfd, irq_rt);
 
-	events = f.file->f_op->poll(f.file, &irqfd->pt);
+	events = f.file->f_op->poll(f.file, &irqfd->pt);		// eventfd_poll to add poll table into f's wait queue
 
 	list_add_tail(&irqfd->list, &kvm->irqfds.items);
 

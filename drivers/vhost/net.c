@@ -427,7 +427,7 @@ static void handle_tx(struct vhost_net *net)
 			ubufs = NULL;
 		}
 		/* TODO: Check specific error and bomb out unless ENOBUFS? */
-		err = sock->ops->sendmsg(NULL, sock, &msg, len);
+		err = sock->ops->sendmsg(NULL, sock, &msg, len);		// call /dev/net/tun tap device's sendmsg
 		if (unlikely(err < 0)) {
 			if (zcopy_used) {
 				vhost_net_ubuf_put(ubufs);
@@ -441,11 +441,11 @@ static void handle_tx(struct vhost_net *net)
 			pr_debug("Truncated TX packet: "
 				 " len %d != %zd\n", err, len);
 		if (!zcopy_used)
-			vhost_add_used_and_signal(&net->dev, vq, head, 0);
+			vhost_add_used_and_signal(&net->dev, vq, head, 0);	// reply
 		else
 			vhost_zerocopy_signal_used(net, vq);
 		total_len += len;
-		vhost_net_tx_packet(net);
+		vhost_net_tx_packet(net);	// only statistical data
 		if (unlikely(total_len >= VHOST_NET_WEIGHT)) {
 			vhost_poll_queue(&vq->poll);
 			break;
