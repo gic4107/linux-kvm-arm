@@ -130,6 +130,7 @@ static struct pnp_driver isapnp_driver = {
 
 static int __init isapnp_init(void)
 {
+printk("module_init of pata_isapnp.c\n");
 	return pnp_register_driver(&isapnp_driver);
 }
 

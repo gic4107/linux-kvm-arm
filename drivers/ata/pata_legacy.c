@@ -1189,7 +1189,7 @@ static __init int legacy_init(void)
 	int slot = 0;
 
 	struct pci_dev *p = NULL;
-
+printk("module_init of pata_legacy.c\n");
 	for_each_pci_dev(p) {
 		int r;
 		/* Check for any overlap of the system ATA mappings. Native

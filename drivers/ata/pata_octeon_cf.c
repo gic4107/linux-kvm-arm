@@ -1083,6 +1083,7 @@ static struct platform_driver octeon_cf_driver = {
 
 static int __init octeon_cf_init(void)
 {
+printk("module_init of pata_octeon_cf.c\n");
 	return platform_driver_register(&octeon_cf_driver);
 }
 

@@ -1776,7 +1776,7 @@ static struct pci_driver piix_pci_driver = {
 static int __init piix_init(void)
 {
 	int rc;
-
+printk("module_init of ata_piix.c\n");
 	DPRINTK("pci_register_driver\n");
 	rc = pci_register_driver(&piix_pci_driver);
 	if (rc)

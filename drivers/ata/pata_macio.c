@@ -1397,7 +1397,7 @@ MODULE_DEVICE_TABLE(pci, pata_macio_pci_match);
 static int __init pata_macio_init(void)
 {
 	int rc;
-
+printk("module_init of pata_macio.c\n");
 	if (!machine_is(powermac))
 		return -ENODEV;
 

@@ -625,6 +625,7 @@ static struct pci_driver ali_pci_driver = {
 static int __init ali_init(void)
 {
 	int ret;
+printk("module_init of pata_ali.c\n");
 	ali_isa_bridge = pci_get_device(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, NULL);
 
 	ret = pci_register_driver(&ali_pci_driver);

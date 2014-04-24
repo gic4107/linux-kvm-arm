@@ -943,7 +943,7 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	 * and the interrupt does not nest into another interrupt
 	 * thread.
 	 */
-	if (new->thread_fn && !nested) {
+	if (new->thread_fn && !nested) {	// thread_fn is null
 		struct task_struct *t;
 		static const struct sched_param param = {
 			.sched_priority = MAX_USER_RT_PRIO/2,
@@ -1165,9 +1165,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	if (new->thread)
 		wake_up_process(new->thread);
 
-	register_irq_proc(irq, desc);
+	register_irq_proc(irq, desc);		// /proc/irq/xxx
 	new->dir = NULL;
-	register_handler_proc(irq, new);
+	register_handler_proc(irq, new);	// /proc/irq/xxx/handler
 	free_cpumask_var(mask);
 
 	return 0;

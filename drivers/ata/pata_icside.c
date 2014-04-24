@@ -611,6 +611,7 @@ static struct ecard_driver pata_icside_driver = {
 
 static int __init pata_icside_init(void)
 {
+printk("module_init of pata_icside.c\n");
 	return ecard_register_driver(&pata_icside_driver);
 }
 

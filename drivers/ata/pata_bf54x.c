@@ -1667,7 +1667,7 @@ static char bfin_atapi_mode[ATAPI_MODE_SIZE];
 static int __init bfin_atapi_init(void)
 {
 	pr_info("register bfin atapi driver\n");
-
+printk("module_init of pata_bf54x.c\n");
 	switch(bfin_atapi_mode[0]) {
 	case 'p':
 	case 'P':

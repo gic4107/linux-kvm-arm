@@ -1,0 +1,2 @@
+config INT_DIS
+       tristate "VirtioP interrupt distributor"

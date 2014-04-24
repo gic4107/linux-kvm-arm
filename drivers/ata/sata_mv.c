@@ -4424,6 +4424,7 @@ static int mv_pci_device_resume(struct pci_dev *pdev)
 static int __init mv_init(void)
 {
 	int rc = -ENODEV;
+printk("module_init of sata_mv.c\n");
 #ifdef CONFIG_PCI
 	rc = pci_register_driver(&mv_pci_driver);
 	if (rc < 0)

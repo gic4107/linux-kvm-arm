@@ -3153,7 +3153,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 {
 	int r;
 	int cpu;
-
+	
 	r = kvm_arch_init(opaque);
 	if (r)
 		goto out_fail;

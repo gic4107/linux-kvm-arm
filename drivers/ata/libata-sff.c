@@ -2420,11 +2420,12 @@ int ata_pci_sff_activate_host(struct ata_host *host,
 	struct pci_dev *pdev = to_pci_dev(dev);
 	const char *drv_name = dev_driver_string(host->dev);
 	int legacy_mode = 0, rc;
-
+printk("1 pdev->irq=%d\n", pdev->irq);
 	rc = ata_host_start(host);
 	if (rc)
 		return rc;
 
+printk("2 pdev->irq=%d\n", pdev->irq);
 	if ((pdev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
 		u8 tmp8, mask;
 
@@ -2444,10 +2445,12 @@ int ata_pci_sff_activate_host(struct ata_host *host,
 #endif
 	}
 
+printk("3 pdev->irq=%d\n", pdev->irq);
 	if (!devres_open_group(dev, NULL, GFP_KERNEL))
 		return -ENOMEM;
 
 	if (!legacy_mode && pdev->irq) {
+//printk("not legacy_mode\n");
 		int i;
 
 		rc = devm_request_irq(dev, pdev->irq, irq_handler,
@@ -2460,8 +2463,10 @@ int ata_pci_sff_activate_host(struct ata_host *host,
 				continue;
 			ata_port_desc(host->ports[i], "irq %d", pdev->irq);
 		}
-	} else if (legacy_mode) {
+	} else if (legacy_mode) {	// here
+printk("legacy_mode ... ", ATA_PRIMARY_IRQ(pdev));
 		if (!ata_port_is_dummy(host->ports[0])) {
+printk("port0, drv_name=%s irq=%d\n", drv_name, ATA_PRIMARY_IRQ(pdev));
 			rc = devm_request_irq(dev, ATA_PRIMARY_IRQ(pdev),
 					      irq_handler, IRQF_SHARED,
 					      drv_name, host);
@@ -2473,6 +2478,7 @@ int ata_pci_sff_activate_host(struct ata_host *host,
 		}
 
 		if (!ata_port_is_dummy(host->ports[1])) {
+printk("port1, drv_name=%s irq=%d\n", drv_name, ATA_SECONDARY_IRQ(pdev));
 			rc = devm_request_irq(dev, ATA_SECONDARY_IRQ(pdev),
 					      irq_handler, IRQF_SHARED,
 					      drv_name, host);
