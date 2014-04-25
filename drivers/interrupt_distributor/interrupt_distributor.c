@@ -2,65 +2,64 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/string.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
+#include <linux/interrupt.h>
 
-#define MAJOR_NUM          60
-#define MODULE_NAME        "mydev"
-#define BUF_LEN		   100
+#define DESC_NUM 10
 
-char *kbuf;
-static ssize_t drv_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
+struct irq_desc_t {
+	unsigned int irq;
+	irq_handler_t handler;
+	unsigned long flags;
+	char *name;
+	void *dev;
+} *irq_desc;
+int desc_count = 0;
+
+static irqreturn_t distributor(int irq, void* dev_id)
 {
-    printk("device read\n");
-    copy_to_user(buf, kbuf, count);
-    return count;
+	printk("distributor function\n");
+	return irq_desc[0].handler(irq, dev_id);	
 }
 
-static ssize_t drv_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
+int register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
 {
-    printk("device write ... ");
-    copy_from_user(kbuf, buf, count);
-    kbuf[count] = '\0';
-    printk("kbuf=%s\n", kbuf);
-    return count;
+	printk("register_irq ... irq=%d, name=%s\n", irq, name);
+	printk("irq_desc=0x%llx\n", &irq_desc[0]);
+	printk("irq_desc.irq=0x%llx\n", &(irq_desc[0].irq));
+	printk("handler=0x%llx\n", (void*)handler);
+	printk("desc_count=0x%llx\n", &desc_count);
+	irq_desc[desc_count].irq = irq;
+printk("1\n");
+	irq_desc[desc_count].handler = handler;
+printk("2\n");
+	irq_desc[desc_count].flags = flags;
+printk("3\n");
+	irq_desc[desc_count].dev = dev;
+printk("4\n");
+	printk("irq_desc[0].name=0x%llx\n", &(irq_desc[0].name));
+	printk("name=0x%llx\n", name);	
+//	strcpy(irq_desc[desc_count++].name, name);
+printk("request_irq distributor=0x%llx\n", (void*)distributor);	
+	return request_irq(irq, distributor, flags, name, dev);
 }
+EXPORT_SYMBOL(register_irq);
 
-static int drv_open(struct inode *inode, struct file *filp)
-{
-    printk("device open\n");
-    kbuf = kmalloc(sizeof(char)*BUF_LEN, GFP_KERNEL);
-    return 0;
+static int __init distributor_init(void) {
+	printk("/****** Interrupt Distributor ******/\n");
+	irq_desc = kmalloc(DESC_NUM*sizeof(struct irq_desc_t), GFP_KERNEL);
+	if(!irq_desc)
+		printk("irq_desc kmalloc fail\n");
+	return 0;
 }
+fs_initcall(distributor_init);
 
-int drv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
-{
-    printk("device ioctl\n");
-    return 0;
+static void __exit distributor_exit(void) {
+	printk("/****** BYE BYE ******/\n");
 }
+module_exit(distributor_exit);
 
-static int drv_release(struct inode *inode, struct file *filp)
-{
-    printk("device close\n");
-    return 0;
-}
-
-struct file_operations drv_fops =
-{
-    .read     =      drv_read,
-    .write    =      drv_write,
-    .compat_ioctl    =      drv_ioctl,
-    .open     =      drv_open,
-    .release  =      drv_release,
-};
-
-static int _init(void) {
-   printk("/****** Welcome to mydev_u0256070 ******/\n");
-   return 0;
-}
-static void _exit(void) {
-   unregister_chrdev(MAJOR_NUM, MODULE_NAME);
-   printk("/****** BYE BYE ******/\n");
-}
-module_init(_init);
-module_exit(_exit);
+MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("Yu-Ju Huang gic4107@gmail.com");

@@ -768,7 +768,7 @@ static struct virtio_driver virtio_blk = {
 static int __init init(void)
 {
 	int error;
-
+printk("virtio-blk\n");
 	virtblk_wq = alloc_workqueue("virtio-blk", 0, 0);
 	if (!virtblk_wq)
 		return -ENOMEM;
@@ -801,5 +801,3 @@ module_init(init);
 module_exit(fini);
 
 MODULE_DEVICE_TABLE(virtio, id_table);
-MODULE_DESCRIPTION("Virtio block driver");
-MODULE_LICENSE("GPL");
