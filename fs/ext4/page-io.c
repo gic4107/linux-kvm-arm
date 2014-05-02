@@ -299,7 +299,7 @@ static void ext4_end_bio(struct bio *bio, int error)
 {
 	ext4_io_end_t *io_end = bio->bi_private;
 	sector_t bi_sector = bio->bi_sector;
-
+printk("ext4_end_io\n");		// not in virtio-blk
 	BUG_ON(!io_end);
 	bio->bi_end_io = NULL;
 	if (test_bit(BIO_UPTODATE, &bio->bi_flags))

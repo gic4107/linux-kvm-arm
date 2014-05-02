@@ -763,7 +763,7 @@ struct submit_bio_ret {
 static void submit_bio_wait_endio(struct bio *bio, int error)
 {
 	struct submit_bio_ret *ret = bio->bi_private;
-
+printk("submit_bio_wait_endio\n");
 	ret->error = error;
 	complete(&ret->event);
 }
@@ -1716,8 +1716,10 @@ void bio_endio(struct bio *bio, int error)
 	else if (!test_bit(BIO_UPTODATE, &bio->bi_flags))
 		error = -EIO;
 
-	if (bio->bi_end_io)
+	if (bio->bi_end_io) {
+//printk("call bio->bi_end_io\n");	// yes
 		bio->bi_end_io(bio, error);
+	}
 }
 EXPORT_SYMBOL(bio_endio);
 

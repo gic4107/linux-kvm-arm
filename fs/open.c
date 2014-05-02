@@ -706,6 +706,7 @@ static int do_dentry_open(struct file *f,
 	}
 
 	f->f_op = fops_get(inode->i_fop);
+//printk("get f_op from do_dentry_open\n");	// yes
 	if (unlikely(WARN_ON(!f->f_op))) {
 		error = -ENODEV;
 		goto cleanup_all;
@@ -980,6 +981,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
+printk("do_sys_open filename=%s\n", filename);	// disk_oe64.img here!!!
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
@@ -1000,7 +1002,6 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
-
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 
@@ -1009,7 +1010,6 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 {
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
-
 	return do_sys_open(dfd, filename, flags, mode);
 }
 
