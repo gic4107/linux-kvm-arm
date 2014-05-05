@@ -1,20 +1,12 @@
 #include <stdio.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <string.h>
-
-#define DEVICE "/dev/mydev"
+#include "../../include/uapi/linux/interrupt_distributor.h"
+//#include "interrupt_distributor.h"
 
 int main()
 {
-	FILE *fp = fopen(DEVICE, "w+");
-	char buf[100] = "u0256070 hello lab4";
-	fwrite(buf, sizeof(char), strlen(buf), fp);
-	char tmp[100];
-	fread(tmp, sizeof(char), strlen(buf), fp);
-	printf("%s\n", tmp);
-	fclose(fp);
-
-	return 0;
-} 
+	int fd = open("/dev/isr_dst", O_RDWR);
+	if(fd<0)
+		printf("fd<0\n");
+	ioctl(fd, SEND_IRQ_TO_GUEST, 0);
+}

@@ -7,12 +7,15 @@
 #include <asm/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
+#include <linux/interrupt_distributor.h>
 
 #define DESC_NUM 10
 #define NAME_LEN 30
+#define DEVICE_NAME "interrupt distributor"
 
 #define hash_fn(dev_id) (unsigned int)((dev_id>>2)%DESC_NUM)
 
+static int major_num;
 struct list_head *irq_desc_hash;	// hash table array
 
 struct irq_desc_t {
@@ -73,9 +76,41 @@ int register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, c
 }
 EXPORT_SYMBOL(register_irq);
 
+static long distributor_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	printk("distributor_ioctl ... ");
+	void __user *argp = (void __user*)arg;
+	int r;
+	switch(cmd) {
+	case SEND_IRQ_TO_GUEST:
+		printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);
+	//	r = -EFAULT;
+	default:
+		printk("unknowned ioctl cmd\n");
+	//	r = -EFAULT;
+	}
+
+out:
+	return r;
+}
+
+static const struct file_operations distributor_fops = {
+	.owner          = THIS_MODULE,
+//	.open           = distributor_open,
+	.unlocked_ioctl = distributor_ioctl,
+//	.release        = 
+};
+
 static int __init distributor_init(void) {
-	printk("/****** Interrupt Distributor ******/\n");
+	printk("/****** Interrupt Distributor ******/ : ");
+	int err;
 	int i;
+	major_num = register_chrdev(0, DEVICE_NAME, &distributor_fops);
+	if(major_num < 0) {
+		printk("interrupt distributor could not get major number\n");
+		return major_num;
+	}
+	printk("major_num=%d\n", major_num);
 	irq_desc_hash = kmalloc(DESC_NUM*sizeof(struct list_head), GFP_KERNEL);
 	if(!irq_desc_hash) {
 		printk("irq_desc_hash allocate fail\n");
@@ -90,6 +125,7 @@ fs_initcall(distributor_init);
 
 static void __exit distributor_exit(void) {
 	printk("/****** Exit INterrupt Distributor ******/\n");
+	unregister_chrdev(major_num, DEVICE_NAME);
 }
 module_exit(distributor_exit);
 
