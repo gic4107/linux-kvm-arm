@@ -7,7 +7,7 @@
 #include <asm/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
-#include <linux/interrupt_distributor.h>
+#include <linux/interrupt_distributor_uapi.h>
 
 #define DESC_NUM 10
 #define NAME_LEN 30
@@ -80,14 +80,16 @@ static long distributor_ioctl(struct file *filp, unsigned int cmd, unsigned long
 {
 	printk("distributor_ioctl ... ");
 	void __user *argp = (void __user*)arg;
-	int r;
+	int r = 0;
 	switch(cmd) {
 	case SEND_IRQ_TO_GUEST:
-		printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);
+		printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);	// filp different between different process
 	//	r = -EFAULT;
+		break;
 	default:
 		printk("unknowned ioctl cmd\n");
 	//	r = -EFAULT;
+		break;
 	}
 
 out:

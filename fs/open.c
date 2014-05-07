@@ -981,7 +981,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
-printk("do_sys_open filename=%s\n", filename);	// disk_oe64.img here!!!
+//printk("do_sys_open filename=%s\n", filename);	// disk_oe64.img here!!!
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
