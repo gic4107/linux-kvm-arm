@@ -27,8 +27,8 @@
 #include <linux/irqchip/arm-gic.h>
 
 #define VGIC_NR_IRQS		256
-#define VGIC_NR_SGIS		16
-#define VGIC_NR_PPIS		16
+#define VGIC_NR_SGIS		16		// software generated interrupt
+#define VGIC_NR_PPIS		16		// per processor interrupt
 #define VGIC_NR_PRIVATE_IRQS	(VGIC_NR_SGIS + VGIC_NR_PPIS)
 #define VGIC_NR_SHARED_IRQS	(VGIC_NR_IRQS - VGIC_NR_PRIVATE_IRQS)
 #define VGIC_MAX_CPUS		KVM_MAX_VCPUS
@@ -132,7 +132,7 @@ struct vgic_cpu {
 	u32		vgic_eisr[2];	/* Saved only */
 	u32		vgic_elrsr[2];	/* Saved only */
 	u32		vgic_apr;
-	u32		vgic_lr[VGIC_MAX_LRS];
+	u32		vgic_lr[VGIC_MAX_LRS];		// will write to hardware list register
 #endif
 };
 

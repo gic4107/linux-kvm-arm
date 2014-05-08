@@ -444,12 +444,12 @@ CPU_BE(	rev	w5, w5 )
 	/* Get VGIC VCTRL base into x2 */
 	ldr	x2, [x0, #VCPU_KVM]
 	kern_hyp_va	x2
-	ldr	x2, [x2, #KVM_VGIC_VCTRL]
+	ldr	x2, [x2, #KVM_VGIC_VCTRL]		// kvm.arch.vgic.vctrl_base is __iomem address
 	kern_hyp_va	x2
 	cbz	x2, 2f		// disabled
 
 	/* Compute the address of struct vgic_cpu */
-	add	x3, x0, #VCPU_VGIC_CPU
+	add	x3, x0, #VCPU_VGIC_CPU			// kvm_vcpu.arch.vgic_cpu
 
 	/* We only restore a minimal set of registers */
 	ldr	w4, [x3, #VGIC_CPU_HCR]
@@ -463,10 +463,15 @@ CPU_BE(	rev	w6, w6 )
 	str	w5, [x2, #GICH_VMCR]
 	str	w6, [x2, #GICH_APR]
 
-	/* Restore list registers */
+	/* Restore list registers */			// __iomem to hardware address
 	add	x2, x2, #GICH_LR0
 	ldr	w4, [x3, #VGIC_CPU_NR_LR]
 	add	x3, x3, #VGIC_CPU_LR
+	/*
+ 	 * x3 in vgic_cpu, x2 in hardware vctl address 
+	 * loop vgic_cpu nr_lr times 
+	 * store vgic_cpu.vgic_lr[w4] to vctrl __iomem address
+	 */
 1:	ldr	w5, [x3], #4
 CPU_BE(	rev	w5, w5 )
 	str	w5, [x2], #4

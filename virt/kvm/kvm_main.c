@@ -2319,7 +2319,7 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 static long kvm_vm_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
-	struct kvm *kvm = filp->private_data;
+	struct kvm *kvm = filp->private_data;		// per guest
 	void __user *argp = (void __user *)arg;
 	int r;
 

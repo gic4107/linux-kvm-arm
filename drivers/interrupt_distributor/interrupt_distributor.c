@@ -7,6 +7,8 @@
 #include <asm/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
+#include <linux/kvm_host.h>
+#include <linux/file.h>
 #include <linux/interrupt_distributor_uapi.h>
 
 #define DESC_NUM 10
@@ -44,7 +46,7 @@ static irqreturn_t distributor(int irq, void* dev_id)
 int register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
 {
 	int hash_value = hash_fn((unsigned long)dev);
-	printk("register_irq ... irq=%d, name=%s, hash=%d", irq, name, dev, hash_fn((unsigned long)dev));
+	printk("register_irq ... irq=%d, name=%s, hash=%lu", irq, name, hash_fn((unsigned long)dev));
 	struct list_head *hash_head = &irq_desc_hash[hash_value];
 	struct irq_desc_t *irq_desc = kmalloc(sizeof(struct irq_desc_t), GFP_KERNEL);		
 	if(list_empty(hash_head)) {
@@ -78,17 +80,28 @@ EXPORT_SYMBOL(register_irq);
 
 static long distributor_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	printk("distributor_ioctl ... ");
 	void __user *argp = (void __user*)arg;
-	int r = 0;
+	int r = -EFAULT;
 	switch(cmd) {
-	case SEND_IRQ_TO_GUEST:
-		printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);	// filp different between different process
-	//	r = -EFAULT;
+	case SEND_IRQ_TO_GUEST: {
+		struct kvm_irq_target irq_target;
+		struct kvm_irq_level irq_level;
+	//	printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);	// filp different between different process
+
+		if(copy_from_user(&irq_target, argp, sizeof irq_target)) {
+			printk("distributor_ioctl: copy_from_user fail\n");
+			goto out;
+		}
+		struct fd f = fdget(irq_target.fd);
+		struct kvm *kvm = f.file->private_data;
+		irq_level.irq   = irq_target.irq;
+		irq_level.level = irq_target.level;
+	//	printk("kvm=0x%x irq=%d level=%d\n", (void*)kvm, irq_level.irq, irq_level.level);
+		r = kvm_vm_ioctl_irq_line(kvm, &irq_level, 0);
 		break;
-	default:
+	}
+	default: 
 		printk("unknowned ioctl cmd\n");
-	//	r = -EFAULT;
 		break;
 	}
 
@@ -105,7 +118,6 @@ static const struct file_operations distributor_fops = {
 
 static int __init distributor_init(void) {
 	printk("/****** Interrupt Distributor ******/ : ");
-	int err;
 	int i;
 	major_num = register_chrdev(0, DEVICE_NAME, &distributor_fops);
 	if(major_num < 0) {

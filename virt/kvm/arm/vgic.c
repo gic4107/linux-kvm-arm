@@ -119,7 +119,8 @@ static void vgic_bitmap_set_irq_val(struct vgic_bitmap *x, int cpuid,
 				    int irq, int val)
 {
 	unsigned long *reg;
-
+	
+	// irq=38 for virtio-blk
 	if (irq < VGIC_NR_PRIVATE_IRQS) {
 		reg = x->percpu[cpuid].reg_ul;
 	} else {
@@ -204,7 +205,9 @@ static int vgic_dist_irq_is_pending(struct kvm_vcpu *vcpu, int irq)
 
 static void vgic_dist_irq_set(struct kvm_vcpu *vcpu, int irq)
 {
-	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;		
+	// vgic_dist within kvm structure
+	// vgic_vpu within vcpu structure
 
 	vgic_bitmap_set_irq_val(&dist->irq_state, vcpu->vcpu_id, irq, 1);
 }
@@ -937,7 +940,7 @@ static bool vgic_queue_hwirq(struct kvm_vcpu *vcpu, int irq)
 	if (vgic_irq_is_active(vcpu, irq))
 		return true; /* level interrupt, already queued */
 
-	if (vgic_queue_irq(vcpu, 0, irq)) {
+	if (vgic_queue_irq(vcpu, 0, irq)) {		// return true on success
 		if (vgic_irq_is_edge(vcpu, irq)) {
 			vgic_dist_irq_clear(vcpu, irq);
 			vgic_cpu_irq_clear(vcpu, irq);
@@ -1176,6 +1179,7 @@ static bool vgic_update_irq_state(struct kvm *kvm, int cpuid,
 	}
 
 	kvm_debug("Inject IRQ%d level %d CPU%d\n", irq_num, level, cpuid);
+	// (27,1,0), (38,1,0) -> times, virtio-blk
 
 	if (level)
 		vgic_dist_irq_set(vcpu, irq_num);
@@ -1183,7 +1187,7 @@ static bool vgic_update_irq_state(struct kvm *kvm, int cpuid,
 		vgic_dist_irq_clear(vcpu, irq_num);
 
 	enabled = vgic_irq_is_enabled(vcpu, irq_num);
-
+//printk("enabled=%d\n", enabled);	// always 1
 	if (!enabled) {
 		ret = false;
 		goto out;
