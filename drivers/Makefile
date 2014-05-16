@@ -156,5 +156,5 @@ obj-$(CONFIG_NTB)		+= ntb/
 obj-$(CONFIG_FMC)		+= fmc/
 obj-$(CONFIG_POWERCAP)		+= powercap/
 
-# gic407
-obj-$(CONFIG_INT_DIS) += interrupt_distributor/
+# Interrupt distributor
+obj-$(CONFIG_INT_DST) += interrupt_distributor/

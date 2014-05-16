@@ -402,12 +402,15 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 	unsigned int irq = platform_get_irq(vm_dev->pdev, 0);
 	int i, err;
 
-//	err = request_irq(irq, vm_interrupt, IRQF_SHARED,
-//			dev_name(&vdev->dev), vm_dev);
 /* gic4107 interrupt distributor */
+#ifdef CONFIG_INT_DST
 	printk("virtio block call register_irq\n");
 	err = register_irq(irq, vm_interrupt, IRQF_SHARED, 
 			dev_name(&vdev->dev), vm_dev);
+#else
+	err = request_irq(irq, vm_interrupt, IRQF_SHARED,
+			dev_name(&vdev->dev), vm_dev);
+#endif
 	if (err)
 		return err;
 

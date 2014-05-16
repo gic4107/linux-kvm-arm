@@ -763,7 +763,6 @@ struct submit_bio_ret {
 static void submit_bio_wait_endio(struct bio *bio, int error)
 {
 	struct submit_bio_ret *ret = bio->bi_private;
-printk("submit_bio_wait_endio\n");
 	ret->error = error;
 	complete(&ret->event);
 }

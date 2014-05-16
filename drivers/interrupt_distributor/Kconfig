@@ -1,2 +1,2 @@
-config INT_DIS
+config INT_DST
        tristate "VirtioP interrupt distributor"

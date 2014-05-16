@@ -1,0 +1,10 @@
+Finish version 1.0 VirtioP Interrupt Distributor
+
+Interrupt flow:
+	Physical device -> Distributor -> Host driver 
+     -> Kvmtool back-end driver -> Distributor -> KVM
+     -> Guest front-end driver
+
+Modify:
+	Kvmtool send irq_target (irq_level + kvm sys_fd) 
+	Distributor use kvm_vm_ioctl_irq_line to send irq to KVM
