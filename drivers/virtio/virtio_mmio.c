@@ -225,6 +225,7 @@ static bool vm_notify(struct virtqueue *vq)
 
 	/* We write the queue's selector into the notification register to
 	 * signal the other end */
+	printk("dev %s %s kick@ 0x%llx\n", dev_name(&(vm_dev->vdev.dev)), dev_name(&(vm_dev->pdev->dev)), vm_dev->base + VIRTIO_MMIO_QUEUE_NOTIFY);
 	writel(vq->index, vm_dev->base + VIRTIO_MMIO_QUEUE_NOTIFY);
 	return true;
 }
@@ -447,6 +448,7 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	struct resource *mem;
 	unsigned long magic;
 
+	printk("virtio_mmio_probe, device_name=%s\n", dev_name(&pdev->dev));
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem)
 		return -EINVAL;
@@ -468,6 +470,7 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	vm_dev->base = devm_ioremap(&pdev->dev, mem->start, resource_size(mem));
 	if (vm_dev->base == NULL)
 		return -EFAULT;
+	printk("mem=0x%llx, vm_dev->base=0x%llx, resource_size=0x%llx\n", mem->start, vm_dev->base, resource_size(mem));
 
 	/* Check magic value */
 	magic = readl(vm_dev->base + VIRTIO_MMIO_MAGIC_VALUE);

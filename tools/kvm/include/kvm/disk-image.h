@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <linux/virtioP.h>
+
 #define SECTOR_SHIFT		9
 #define SECTOR_SIZE		(1UL << SECTOR_SHIFT)
 
@@ -67,6 +69,10 @@ struct disk_image {
 	const char			*wwpn;
 	const char			*tpgt;
 	int				debug_iodelay;
+#ifdef VIRTIOP
+        bool                            bind;
+        char	                        *filename;
+#endif
 };
 
 int disk_img_name_parser(const struct option *opt, const char *arg, int unset);

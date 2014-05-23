@@ -7,6 +7,8 @@
 #include <sys/eventfd.h>
 #include <sys/poll.h>
 
+#include <linux/virtioP.h>
+
 #define AIO_MAX 256
 
 int debug_iodelay;
@@ -206,6 +208,15 @@ static struct disk_image **disk_image__open_all(struct kvm *kvm)
 			continue;
 
 		disks[i] = disk_image__open(filename, readonly, direct);
+#ifdef VIRTIOP
+//               strcpy(disk[i]->filename, filename);
+               if(!strcmp(filename, "/dev/vda")) {
+                       disks[i]->bind = 1; 
+                       printf("/dev/vda\n");
+               }
+               else
+                       disks[i]->bind = 0;
+#endif
 		if (IS_ERR_OR_NULL(disks[i])) {
 			pr_err("Loading disk image '%s' failed", filename);
 			err = disks[i];

@@ -952,6 +952,12 @@ struct kvm_s390_ucas_mapping {
 #define KVM_GET_DEVICE_ATTR	  _IOW(KVMIO,  0xe2, struct kvm_device_attr)
 #define KVM_HAS_DEVICE_ATTR	  _IOW(KVMIO,  0xe3, struct kvm_device_attr)
 
+/* ioctl for virtioP */
+#if defined(CONFIG_VIRTIOP) || defined(VIRTIOP)
+#define KVM_BIND_DISK             _IOW(KVMIO,  0xe4, struct kvm_virtiop_bind_device)
+#endif
+
+
 /*
  * ioctls for vcpu fds
  */

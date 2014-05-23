@@ -7,6 +7,15 @@
 /* Unique numbering for virtio devices. */
 static DEFINE_IDA(virtio_index_ida);
 
+/* For virtioP */
+static struct virtio_device *get_virtio_device(const char* device_name)
+{
+	struct virtio_device *vdev;
+	
+
+
+} 
+
 static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
