@@ -44,9 +44,6 @@
 #include <asm/kvm_coproc.h>
 #include <asm/kvm_psci.h>
 
-/* For virtioP */
-#include <linux/virtioP.h>
-
 #ifdef REQUIRES_VIRT
 __asm__(".arch_extension	virt");
 #endif
@@ -814,20 +811,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 
 		return 0;
 	}
-#ifdef CONFIG_VIRTIOP
-        case KVM_BIND_DISK: {
-                struct kvm_virtiop_bind_device bind_device;
-		struct virtio_device *vdev;
-		int err;
-
-                if(copy_from_user(&bind_device, argp, sizeof bind_device))
-			return -EFAULT;
-                printk("KVM_BIND_DISK: 0x%x\n", bind_device.mmio_gpa);
-		vdev = get_virtio_device("virtio0");		
-                err = 0;
-                break;
-       }
-#endif  
 	default:
 		return -EINVAL;
 	}

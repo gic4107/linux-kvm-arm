@@ -103,6 +103,9 @@ OBJS	+= kvm-ipc.o
 OBJS	+= builtin-sandbox.o
 OBJS	+= virtio/mmio.o
 
+# For virtioP
+	DEFINES += -DCONFIG_VIRTIOP
+
 # Translate uname -m into ARCH string
 ARCH ?= $(shell uname -m | sed -e s/i.86/i386/ -e s/ppc.*/powerpc/ \
 	  -e s/armv7.*/arm/ -e s/aarch64.*/arm64/)

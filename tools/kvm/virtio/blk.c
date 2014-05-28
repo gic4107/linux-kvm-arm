@@ -20,7 +20,6 @@
 #include <pthread.h>
 
 /* For virtioP */
-#include <linux/virtioP.h>
 #include <linux/kvm.h>
 #include "kvm/virtio-mmio.h"
 
@@ -268,15 +267,16 @@ static int virtio_blk__init_one(struct kvm *kvm, struct disk_image *disk)
 		    VIRTIO_DEFAULT_TRANS(kvm), PCI_DEVICE_ID_VIRTIO_BLK,
 		    VIRTIO_ID_BLOCK, PCI_CLASS_BLK);
 
-#ifdef VIRTIOP
+#ifdef CONFIG_VIRTIOP
         struct virtio_mmio *vmmio = (struct virtio_mmio*)(&bdev->vdev)->virtio;
         struct kvm_virtiop_bind_device bind_device;
         bind_device.mmio_gpa = vmmio->addr;
+	bind_device.mmio_len = VIRTIO_MMIO_IO_SIZE;
         int err = 0;
         if(disk->bind == 1) {
-                err = ioctl(kvm->vm_fd, KVM_BIND_DISK, &bind_device);
+                err = ioctl(kvm->vm_fd, KVM_VIRTIOP_BIND_DISK, &bind_device);
                 if(err < 0)
-                        printf("KVM_BIND_DISK ioctl fail\n");
+                        printf("KVM_VIRTIOP_BIND_DISK ioctl fail\n");
         }
 #endif
 

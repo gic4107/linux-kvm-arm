@@ -953,8 +953,9 @@ struct kvm_s390_ucas_mapping {
 #define KVM_HAS_DEVICE_ATTR	  _IOW(KVMIO,  0xe3, struct kvm_device_attr)
 
 /* ioctl for virtioP */
-#if defined(CONFIG_VIRTIOP) || defined(VIRTIOP)
-#define KVM_BIND_DISK             _IOW(KVMIO,  0xe4, struct kvm_virtiop_bind_device)
+#ifdef CONFIG_VIRTIOP
+#define VIRTIOP
+#define KVM_VIRTIOP_BIND_DISK             _IOW(KVMIO,  0xe4, struct kvm_virtiop_bind_device)
 #endif
 
 
@@ -1080,5 +1081,13 @@ struct kvm_assigned_msix_entry {
 	__u16 entry; /* The index of entry in the MSI-X table */
 	__u16 padding[3];
 };
+
+#ifdef CONFIG_VIRTIOP
+struct kvm_virtiop_bind_device {
+        u64 mmio_gpa;
+        int mmio_len;
+};
+#endif 
+
 
 #endif /* __LINUX_KVM_H */

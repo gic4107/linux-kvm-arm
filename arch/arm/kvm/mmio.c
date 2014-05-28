@@ -162,6 +162,43 @@ static int decode_hsr(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	return 0;
 }
 
+
+/**
+ * Check whether kvm_io_bus can handle this MMIO request
+ *
+ * return non-zero means the request has been handled by kvm_io_bus, and
+ * we don't require user space.
+ */
+
+static int kvm_arm_mmio_read_write(struct kvm_vcpu *vcpu, struct kvm_run *run,
+		 struct kvm_exit_mmio *mmio)
+{
+	int ret;
+	gpa_t addr = mmio->phys_addr;
+	int len = mmio->len;
+	void *v = mmio->data;
+
+	mutex_lock(&vcpu->kvm->slots_lock);
+	if (mmio->is_write)
+		ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, addr, len, v);
+	else
+		ret = kvm_io_bus_read(vcpu->kvm, KVM_MMIO_BUS, addr, len, v);
+	mutex_unlock(&vcpu->kvm->slots_lock);
+
+	if (ret == 0) {
+		kvm_prepare_mmio(run, mmio);
+		kvm_handle_mmio_return(vcpu, run);
+	}
+
+	/*
+	 * Returning 0 from kvm_io_bus_*() means the mmio request has been
+	 * processed, but the caller handle_exit() and io_mem_abort() regards
+	 * as requiring user-space.
+	 */
+
+	return !ret;
+}
+
 int io_mem_abort(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		 phys_addr_t fault_ipa)
 {
@@ -198,6 +235,9 @@ int io_mem_abort(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		mmio_write_buf(mmio.data, mmio.len, data);
 
 	if (vgic_handle_mmio(vcpu, run, &mmio))
+		return 1;
+	
+	if(kvm_arm_mmio_read_write(vcpu, run, &mmio))
 		return 1;
 
 	kvm_prepare_mmio(run, &mmio);

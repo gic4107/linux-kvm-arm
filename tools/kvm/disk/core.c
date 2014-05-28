@@ -7,8 +7,6 @@
 #include <sys/eventfd.h>
 #include <sys/poll.h>
 
-#include <linux/virtioP.h>
-
 #define AIO_MAX 256
 
 int debug_iodelay;
@@ -208,7 +206,7 @@ static struct disk_image **disk_image__open_all(struct kvm *kvm)
 			continue;
 
 		disks[i] = disk_image__open(filename, readonly, direct);
-#ifdef VIRTIOP
+#ifdef CONFIG_VIRTIOP
 //               strcpy(disk[i]->filename, filename);
                if(!strcmp(filename, "/dev/vda")) {
                        disks[i]->bind = 1; 

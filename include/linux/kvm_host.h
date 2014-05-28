@@ -1104,5 +1104,10 @@ static inline bool kvm_vcpu_eligible_for_directed_yield(struct kvm_vcpu *vcpu)
 }
 
 #endif /* CONFIG_HAVE_KVM_CPU_RELAX_INTERCEPT */
+
+#ifdef CONFIG_VIRTIOP
+int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device); 
+#endif
+
 #endif
 

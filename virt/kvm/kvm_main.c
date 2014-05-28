@@ -2479,6 +2479,18 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = 0;
 		break;
 	}
+#ifdef CONFIG_VIRTIOP
+        case KVM_VIRTIOP_BIND_DISK: {
+                struct kvm_virtiop_bind_device bind_device;
+                int err;
+
+                if(copy_from_user(&bind_device, argp, sizeof bind_device))
+                        return -EFAULT;
+                printk("KVM_VIRTIOP_BIND_DISK\n");
+                err = kvm_assign_vmmio(kvm, &bind_device);
+                break;
+       }
+#endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
 		if (r == -ENOTTY)
@@ -2846,6 +2858,14 @@ static int __kvm_io_bus_write(struct kvm_io_bus *bus,
 
 	while (idx < bus->dev_count &&
 		kvm_io_bus_cmp(range, &bus->range[idx]) == 0) {
+/*		printk("call kvm_iodevice_write ... ");
+		if(bus->range[idx].dev == NULL)
+			printk("dev null\n");
+		else if (bus->range[idx].dev->ops == NULL)
+			printk("ops null\n");
+		else if (bus->range[idx].dev->ops->write == NULL)
+			printk("write null\n");
+*/
 		if (!kvm_iodevice_write(bus->range[idx].dev, range->addr,
 					range->len, val))
 			return idx;
@@ -2973,10 +2993,11 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 {
 	struct kvm_io_bus *new_bus, *bus;
 
+	printk("kvm_io_bus_register_dev, gpu=0x%llx\n", addr);
 	bus = kvm->buses[bus_idx];
 	/* exclude ioeventfd which is limited by maximum fd */
-	if (bus->dev_count - bus->ioeventfd_count > NR_IOBUS_DEVS - 1)
-		return -ENOSPC;
+	if (bus->dev_count - bus->ioeventfd_count > NR_IOBUS_DEVS - 1) 
+		printk("kvm_io_bus_register_dev -ENOSPC\n");
 
 	new_bus = kzalloc(sizeof(*bus) + ((bus->dev_count + 1) *
 			  sizeof(struct kvm_io_range)), GFP_KERNEL);
