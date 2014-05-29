@@ -19,6 +19,10 @@ int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_devic
 	int ret;
 	struct virtiop_device *d;
 	
+	ret = register_virtiop_mmio_range(kvm, bind_device);
+	if(ret < 0)
+		goto out;
+
 	d = kzalloc(sizeof(*d), GFP_KERNEL);
 	if(!d) 
 		return -ENOMEM;
@@ -28,6 +32,9 @@ int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_devic
 	d->dev.ops = &virtiop_ops;
 	
 	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, d->addr, d->len, &d->dev);
+	return ret;
 
+out:
+	deregister_virtiop_mmio_range(bind_device);
 	return ret;
 }

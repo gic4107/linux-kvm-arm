@@ -174,8 +174,10 @@ static void vm_get(struct virtio_device *vdev, unsigned offset,
 	u8 *ptr = buf;
 	int i;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
+		printk("vm_get 0x%llx\n", vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
 		ptr[i] = readb(vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
+	}
 }
 
 static void vm_set(struct virtio_device *vdev, unsigned offset,
@@ -185,8 +187,10 @@ static void vm_set(struct virtio_device *vdev, unsigned offset,
 	const u8 *ptr = buf;
 	int i;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
+		printk("vm_set 0x%llx\n", vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
 		writeb(ptr[i], vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
+	}
 }
 
 static u8 vm_get_status(struct virtio_device *vdev)
@@ -366,6 +370,8 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	writel(virt_to_phys(info->queue) >> PAGE_SHIFT,
 			vm_dev->base + VIRTIO_MMIO_QUEUE_PFN);
 
+	printk("host's virtqueue address, VA=0x%llx, PA=0x%llx, HFN=%x\n", 
+			info->queue, virt_to_phys(info->queue), virt_to_phys(info->queue)>>PAGE_SHIFT);
 	/* Create the vring */
 	vq = vring_new_virtqueue(index, info->num, VIRTIO_MMIO_VRING_ALIGN, vdev,
 				 true, info->queue, vm_notify, callback, name);

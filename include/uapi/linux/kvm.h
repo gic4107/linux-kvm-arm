@@ -1084,6 +1084,7 @@ struct kvm_assigned_msix_entry {
 
 #ifdef CONFIG_VIRTIOP
 struct kvm_virtiop_bind_device {
+	struct kvm* kvm;
         u64 mmio_gpa;
         int mmio_len;
 };

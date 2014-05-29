@@ -232,7 +232,7 @@ int io_mem_abort(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			(mmio.is_write) ? data : 0);
 
 	if (mmio.is_write)
-		mmio_write_buf(mmio.data, mmio.len, data);
+		mmio_write_buf(mmio.data, mmio.len, data);	// set mmio.data to write data
 
 	if (vgic_handle_mmio(vcpu, run, &mmio))
 		return 1;
