@@ -1,0 +1,5 @@
+Reconstruct interrupt distributor's header file and test program.
+
+register_irq: driver's folder
+ioctl command: uapi folder
+test program: test folder under driver's folder

@@ -1113,7 +1113,8 @@ static bool hva_to_pfn_fast(unsigned long addr, bool atomic, bool *async,
 {
 	struct page *page[1];
 	int npages;
-
+	
+//	printk("hva_to_pfn_fast\n");
 	if (!(async || atomic))
 		return false;
 
@@ -1147,6 +1148,7 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 	struct page *page[1];
 	int npages = 0;
 
+//	printk("hva_to_pfn_slow:");
 	might_sleep();
 
 	if (writable)
@@ -1157,9 +1159,12 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 		npages = get_user_page_nowait(current, current->mm,
 					      addr, write_fault, page);
 		up_read(&current->mm->mmap_sem);
-	} else
+	} else {
+//		printk("call get_user_pages_fast:");
 		npages = get_user_pages_fast(addr, 1, write_fault,
 					     page);
+//		printk("npages=%d\n", npages);
+	}
 	if (npages != 1)
 		return npages;
 
@@ -1212,16 +1217,19 @@ static pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool *async,
 	pfn_t pfn = 0;
 	int npages;
 
+//	printk("in hva_to_pfn\n");
 	/* we can do it either atomically or asynchronously, not both */
 	BUG_ON(atomic && async);
 
 	if (hva_to_pfn_fast(addr, atomic, async, write_fault, writable, &pfn))
 		return pfn;
 
+//	printk("finish find_fast\n");
 	if (atomic)
 		return KVM_PFN_ERR_FAULT;
 
 	npages = hva_to_pfn_slow(addr, async, write_fault, writable, &pfn);
+//	printk("finish find_slow\n");
 	if (npages == 1)
 		return pfn;
 
@@ -1234,6 +1242,7 @@ static pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool *async,
 
 	vma = find_vma_intersection(current->mm, addr, addr + 1);
 
+//	printk("finish find_vam_intersection\n");
 	if (vma == NULL)
 		pfn = KVM_PFN_ERR_FAULT;
 	else if ((vma->vm_flags & VM_PFNMAP)) {
@@ -1256,6 +1265,7 @@ __gfn_to_pfn_memslot(struct kvm_memory_slot *slot, gfn_t gfn, bool atomic,
 {
 	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
 
+//	printk("gpn_to_hva=0x%llx\n", addr);
 	if (addr == KVM_HVA_ERR_RO_BAD)
 		return KVM_PFN_ERR_RO_FAULT;
 
@@ -2993,7 +3003,7 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 {
 	struct kvm_io_bus *new_bus, *bus;
 
-	printk("kvm_io_bus_register_dev, gpu=0x%llx\n", addr);
+	printk("kvm_io_bus_register_dev, gpa=0x%llx\n", addr);
 	bus = kvm->buses[bus_idx];
 	/* exclude ioeventfd which is limited by maximum fd */
 	if (bus->dev_count - bus->ioeventfd_count > NR_IOBUS_DEVS - 1) 

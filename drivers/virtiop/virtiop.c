@@ -1,6 +1,7 @@
 #include <linux/kernel.h> 
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
+#include <linux/kvm_types.h>
 #include <linux/io.h>
 #include <linux/virtio_mmio.h>
 #include <linux/virtiop.h>
@@ -73,12 +74,17 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 			writeb(ptr[i], HOST_VIRTIO0_BASE + VIRTIO_MMIO_CONFIG + offset + i);
 	}
 	else if (offset == VIRTIO_MMIO_QUEUE_PFN) {
-		pte_t new_pte = pfn_pte(HOST_VQ_PFN, PAGE_S2);
+/*		pte_t new_pte = pfn_pte(HOST_VQ_PFN, PAGE_S2);
 		u64 gpa = (*(u64*)val)<<PAGE_SHIFT;
+		printk("write VIRTIO_MMIO_QUEUE_PFN gpa=0x%llx, host_vq_pfn=0x%llx\n", gpa, HOST_VQ_PFN);
 		stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, gpa, &new_pte, false);
-
-		printk("write VIRTIO_MMIO_QUEUE_PFN 0x%llx 0x%llx\n", val, *(unsigned long*)val);
-		printk("HOST_VQ_PFN=0x%llx\n", HOST_VQ_PFN);
+*/
+		/* Change host's VQ to what guest set */
+		bool writeable;
+		printk("Write VIRTIO_MMIO_QUEUE_PFN val=0x%llx\n", *(gfn_t*)val);
+		pfn_t pfn = gfn_to_pfn_prot(kvm, *(gfn_t*)val, 1, &writeable);
+		printk("gfn=0x%llx, pfn=0x%llx writeable=%d\n", *(gfn_t*)val, pfn, writeable);
+		writel((u32)pfn, HOST_VIRTIO0_BASE+offset);
 	}
 	else
 		writel(*(int*)val, HOST_VIRTIO0_BASE+offset);
