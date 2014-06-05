@@ -1163,7 +1163,7 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 //		printk("call get_user_pages_fast:");
 		npages = get_user_pages_fast(addr, 1, write_fault,
 					     page);
-//		printk("npages=%d\n", npages);
+//		printk("npages=%d\n", npages);	yes in virtiop set PFN
 	}
 	if (npages != 1)
 		return npages;
@@ -1266,11 +1266,15 @@ __gfn_to_pfn_memslot(struct kvm_memory_slot *slot, gfn_t gfn, bool atomic,
 	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
 
 //	printk("gpn_to_hva=0x%llx\n", addr);
-	if (addr == KVM_HVA_ERR_RO_BAD)
+	if (addr == KVM_HVA_ERR_RO_BAD) {
+		printk("KVM_PFN_ERR_RO_FAULT\n");
 		return KVM_PFN_ERR_RO_FAULT;
+	}
 
-	if (kvm_is_error_hva(addr))
+	if (kvm_is_error_hva(addr)) {
+		printk("KVM_PFN_NOSLOT\n");
 		return KVM_PFN_NOSLOT;
+	}
 
 	/* Do not map writable pfn in the readonly memslot. */
 	if (writable && memslot_is_readonly(slot)) {

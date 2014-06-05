@@ -554,6 +554,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	virtio_mq_reg.cmd_size =
 		sizeof(struct virtblk_req) +
 		sizeof(struct scatterlist) * sg_elems;
+	printk("sg_elems=%d, virtio_mq_reg_cmd_size=%d\n", sg_elems, virtio_mq_reg.cmd_size);
 
 	q = vblk->disk->queue = blk_mq_init_queue(&virtio_mq_reg, vblk);
 	if (!q) {

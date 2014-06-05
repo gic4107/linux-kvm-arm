@@ -7,31 +7,28 @@
 
 #include <linux/virtiop.h>
 
-struct virtiop_device {
-	u64			addr;
-	int			len;
-	struct kvm_io_device	dev;
-};
-
 int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
 {
 	printk("kvm_assign_vmmio: 0x%llx, %d\n", bind_device->mmio_gpa, bind_device->mmio_len);
 	int ret;
-	struct virtiop_device *d;
+	struct kvm_virtiop_device *d;
 	
-	ret = register_virtiop_mmio_range(kvm, bind_device);
-	if(ret < 0)
-		goto out;
-
 	d = kzalloc(sizeof(*d), GFP_KERNEL);
 	if(!d) 
 		return -ENOMEM;
 	
-	d->addr = bind_device->mmio_gpa;
-	d->len  = bind_device->mmio_len;
+	d->mmio_gpa = bind_device->mmio_gpa;
+	d->mmio_len = bind_device->mmio_len;
 	d->dev.ops = &virtiop_ops;
 	
-	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, d->addr, d->len, &d->dev);
+	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, d->mmio_gpa, d->mmio_len, &d->dev);
+	if(ret < 0)
+		goto out;
+
+	ret = register_virtiop_mmio_range(kvm, d);
+	if(ret < 0)
+		goto out;
+
 	return ret;
 
 out:

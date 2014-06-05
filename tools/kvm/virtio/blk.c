@@ -271,7 +271,7 @@ static int virtio_blk__init_one(struct kvm *kvm, struct disk_image *disk)
         struct virtio_mmio *vmmio = (struct virtio_mmio*)(&bdev->vdev)->virtio;
         struct kvm_virtiop_bind_device bind_device;
         bind_device.mmio_gpa = vmmio->addr;
-	bind_device.mmio_len = VIRTIO_MMIO_IO_SIZE;
+		bind_device.mmio_len = VIRTIO_MMIO_IO_SIZE;
         int err = 0;
         if(disk->bind == 1) {
                 err = ioctl(kvm->vm_fd, KVM_VIRTIOP_BIND_DISK, &bind_device);
