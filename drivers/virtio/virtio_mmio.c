@@ -101,13 +101,12 @@
 #include <linux/virtio_mmio.h>
 #include <linux/virtio_ring.h>
 
-
+/* For VirtioP */
+#include <linux/virtiop.h>
 
 /* The alignment to use between consumer and producer parts of vring.
  * Currently hardcoded to the page size. */
 #define VIRTIO_MMIO_VRING_ALIGN		PAGE_SIZE
-
-
 
 #define to_virtio_mmio_device(_plat_dev) \
 	container_of(_plat_dev, struct virtio_mmio_device, vdev)
@@ -408,8 +407,15 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 	unsigned int irq = platform_get_irq(vm_dev->pdev, 0);
 	int i, err;
 
-	err = request_irq(irq, vm_interrupt, IRQF_SHARED,
-			dev_name(&vdev->dev), vm_dev);
+	/* VirtioP interrupt distributor */                                                 
+#ifdef CONFIG_VIRTIOP                                                          
+    printk("virtio block call register_irq\n"); 
+    err = register_irq(irq, vm_interrupt, IRQF_SHARED,                              
+            dev_name(&vdev->dev), vm_dev);                                          
+#else                                                                               
+    err = request_irq(irq, vm_interrupt, IRQF_SHARED,                               
+            dev_name(&vdev->dev), vm_dev);                                          
+#endif 
 	if (err)
 		return err;
 

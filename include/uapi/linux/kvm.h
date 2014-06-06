@@ -1086,7 +1086,17 @@ struct kvm_assigned_msix_entry {
 struct kvm_virtiop_bind_device {
     u64 mmio_gpa;
     int mmio_len;
+	u8  mmio_irq;
 };
+                                                                                    
+struct kvm_irq_target {                                                             
+    int fd;                                                                         
+    union {                                                                         
+        __u32 irq;                                                                  
+        __s32 status;                                                               
+    };                                                                              
+    __u32 level;                                                                    
+};                                                                                  
 #endif 
 
 

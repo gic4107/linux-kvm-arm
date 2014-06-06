@@ -10,27 +10,24 @@
 int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
 {
 	printk("kvm_assign_vmmio: 0x%llx, %d\n", bind_device->mmio_gpa, bind_device->mmio_len);
-	int ret;
-	struct kvm_virtiop_device *d;
+	int ret = 0;
+	struct kvm_io_device *dev;
 	
-	d = kzalloc(sizeof(*d), GFP_KERNEL);
-	if(!d) 
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if(!dev) 
 		return -ENOMEM;
 	
-	d->mmio_gpa = bind_device->mmio_gpa;
-	d->mmio_len = bind_device->mmio_len;
-	d->dev.ops = &virtiop_ops;
-	
-	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, d->mmio_gpa, d->mmio_len, &d->dev);
+	dev->ops = &virtiop_ops;
+	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, 
+				bind_device->mmio_gpa, bind_device->mmio_len, dev);
 	if(ret < 0)
 		goto out;
 
-	ret = register_virtiop_mmio_range(kvm, d);
+	ret = register_virtiop_mmio_range(kvm, bind_device);
 	if(ret < 0)
 		goto out;
 
 	return ret;
-
 out:
 	deregister_virtiop_mmio_range(bind_device);
 	return ret;

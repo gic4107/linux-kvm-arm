@@ -134,6 +134,7 @@ static void virtblk_done(struct virtqueue *vq)
 	unsigned long flags;
 	unsigned int len;
 
+	printk("virtblk_done\n");
 	spin_lock_irqsave(&vblk->vq_lock, flags);
 	do {
 		virtqueue_disable_cb(vq);
