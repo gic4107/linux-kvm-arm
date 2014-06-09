@@ -29,8 +29,6 @@ static unsigned next_desc(struct vring_desc *desc,
 static inline u16 virt_queue__pop(struct virt_queue *queue)                      
 {                                                                                
 	printk("used idx=%d\n", queue->vring.used->idx);
-	queue->vring.used->idx++;
-	printk("used idx=%d\n", queue->vring.used->idx);
     return queue->vring.avail->ring[queue->last_avail_idx++ % queue->vring.num]; 
 }                                                                                
                                                                                  

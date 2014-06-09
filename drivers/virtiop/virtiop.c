@@ -35,13 +35,13 @@ hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 	hfn_t hfn;
 	bool writeable;
 	
-	printk("translate_gpa_pa, pga=0x%llx\n", gpa);
+	printk("translate_gpa_pa, gpa=0x%llx\n", gpa);
 	offset = gpa & (PAGE_SIZE-1);
 	gfn = __phys_to_pfn(gpa);
 	hfn = gfn_to_pfn_prot(kvm, gfn, 1, &writeable);
 	hpa = __pfn_to_phys(hfn) + offset;
 
-
+/*
     struct page *page;
 	void* kv_page;
     page = pfn_to_page(hfn);            
@@ -63,8 +63,9 @@ hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 		printk("%x", *i);
 	printk("\n");
 	kunmap(kv_page);	
-
+*/
 	printk("offset=0x%llx, gfn=0x%llx, hfn=0x%llx, hpa=0x%llx\n", offset, gfn, hfn, hpa);
+	printk("==================================\n");
 
 	return hpa;
 }
@@ -89,13 +90,24 @@ u16 virt_queue__get_head_iov(struct virt_queue *vq, u16 head, struct kvm *kvm)
         idx = 0;                                                                 
     }                                                                            
 */                                                                              
-    do {                                                                         
+	unsigned char *c;
+    do {    
         iov_len = desc[idx].len;                                 
         iov_gpa = desc[idx].addr;      
+		printk("===== Translate GPA to PA =====\n");
 		printk("idx=%d, iov_len=%d, iov_gpa=0x%llx\n", idx, iov_len, iov_gpa);
-		iov_hpa  = translate_gpa_pa(kvm, iov_gpa, iov_len);
-		desc[idx].addr = iov_hpa;
-		printk("iov_hpa=%p, desc[%d].addr=%p\n", iov_hpa, idx, desc[idx].addr);
+        unsigned char *c = &desc[idx];    
+        int j = 0;                                                              
+        while(1) {                                                              
+            printk("%x ", *c);                                                  
+            j++;                                                                
+			c++;
+            if(j==16)   break;                                                  
+        }                                                                       
+        printk("\n");   
+
+//		iov_hpa  = translate_gpa_pa(kvm, iov_gpa, iov_len);
+//		desc[idx].addr = iov_hpa;
     } while ((idx = next_desc(desc, idx, max)) != max);                          
                                                                                  
     return head;                                                                 
@@ -139,22 +151,37 @@ int vq_translate_gpa_pa(struct kvm *kvm, pfn_t vq_desc_hfn,
         printk("vq_used null\n");                                           
         return -1;                                                           
     }                                                                        
+	printk("desc_hfn=0x%x, avail_hfn=0x%x, used_hfn=0x%x\n", vq_desc_hfn, vq_avail_hfn, vq_used_hfn);
     printk("vq_desc=0x%lx, vq_avail=0x%lx, vq_used=0x%lx\n", (unsigned long)vq_desc, (unsigned long)vq_avail, (unsigned long)vq_used);
 
-	vq = kmalloc(sizeof(struct virt_queue), GFP_KERNEL);	
+/*	vq = kmalloc(sizeof(struct virt_queue), GFP_KERNEL);	
 	vq->vring.desc  = vq_desc;
 	vq->vring.avail = vq_avail;
 	vq->vring.used  = vq_used;
 	vq->vring.num   = VIRTIO_BLK_QUEUE_SIZE;
-	vq->last_avail_idx = -1;
+	vq->last_avail_idx = 0;
+*/
+	struct vring_desc *desc = (struct desc*)vq_desc;
+	int i;
+	for(i=0; i<3; i++) {
+   	    int j = 0;                                                              
+    	unsigned char *c = &desc[i];    
+	    while(1) {                                                              
+	        printk("%x ", *c);                                                  
+	        j++;                                                                
+			c++;
+	        if(j==16)   break;                                                  
+	    }                                                                       
+	    printk("\n");   
+	}
 
-    while (virt_queue__available(vq)) {
-        head        = virt_queue__pop(vq);
-		printk("vq_translate_gpa_pa, head=%d\n", head);
-        virt_queue__get_head_iov(vq, head, kvm);
-    }	
+//    while (virt_queue__available(vq)) {
+//        head        = virt_queue__pop(vq);
+//		printk("vq_translate_gpa_pa, head=%d\n", head);
+//        virt_queue__get_head_iov(vq, head, kvm);
+//    }	
 
-	kfree(vq);
+//	kfree(vq);
 	kunmap(vq_used);
 	kunmap(vq_avail);
 	kunmap(vq_desc);
@@ -235,9 +262,9 @@ static int virtiop_read(struct kvm_io_device *this, gpa_t addr, int len,
 		*(int*)val = 1;
 	else
 		*(unsigned long*)val = readl(target);
-	//printk("virtiop_read gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
+	printk("virtiop_read gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
 
-        return 0;
+    return 0;
 }
 
 static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
@@ -250,38 +277,55 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 	int offset = addr - mmio_base;
 	volatile void __iomem *target = (HOST_VIRTIO0_BASE + offset);
 
-	//printk("virtiop_write gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
+	printk("virtiop_write gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
 	if(offset > VIRTIO_MMIO_CONFIG) {
 		u8 *ptr = val;
 		writeb(*ptr, target);
 	}
 	else if (offset == VIRTIO_MMIO_QUEUE_PFN) {
 		/* Method1: Map guest's VQ host's VQ */
-/*		pte_t new_pte = pfn_pte(HOST_VQ_PFN, PAGE_S2);
-		u64 gpa = (*(u64*)val)<<PAGE_SHIFT;
-		printk("write VIRTIO_MMIO_QUEUE_PFN gpa=0x%llx, host_vq_pfn=0x%llx\n", gpa, HOST_VQ_PFN);
-		stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, gpa, &new_pte, false);
-*/
+		pte_t host_desc_pte, host_avail_pte, host_used_pte;
+		u64 desc_gpa, avail_gpa, used_gpa;
+		u64 queue_pfn = *(u64*)val;
+
+		host_desc_pte  = pfn_pte(HOST_VQ_PFN, PAGE_S2);
+		host_avail_pte = pfn_pte(HOST_VQ_PFN+1, PAGE_S2);
+		host_used_pte  = pfn_pte(HOST_VQ_PFN+2, PAGE_S2);
+
+		desc_gpa  = queue_pfn<<PAGE_SHIFT;
+		avail_gpa = (queue_pfn+1)<<PAGE_SHIFT;
+		used_gpa  = (queue_pfn+2)<<PAGE_SHIFT;
+
+		int ret;
+		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, desc_gpa, &host_desc_pte, false);
+		printk("stage2_set_pte, ret=%d\n", ret);
+		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, avail_gpa, &host_avail_pte, false);
+		printk("stage2_set_pte, ret=%d\n", ret);
+		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, used_gpa, &host_used_pte, false);
+		printk("stage2_set_pte, ret=%d\n", ret);
+
+		virtiop_device[dev_num].vq_desc_hfn  = HOST_VQ_PFN;
+		virtiop_device[dev_num].vq_avail_hfn = HOST_VQ_PFN+1; 
+		virtiop_device[dev_num].vq_used_hfn  = HOST_VQ_PFN+2;
+
 		/* Method2: Change host's VQ to where guest set */
-		bool writeable;
+/*		bool writeable;
 		printk("Write VIRTIO_MMIO_QUEUE_PFN val=0x%llx\n", *(gfn_t*)val);
 		hfn_t hfn = gfn_to_pfn_prot(kvm, *(gfn_t*)val, 1, &writeable);
+		hfn_t hfn_avail = gfn_to_pfn_prot(kvm, (*(gfn_t*)val)+VQ_AVAIL_GFN_OFFSET, 1, &writeable); 
+		hfn_t hfn_used =  gfn_to_pfn_prot(kvm, (*(gfn_t*)val)+VQ_USED_GFN_OFFSET, 1, &writeable);
 		if(hfn==KVM_PFN_ERR_MASK || hfn==KVM_PFN_ERR_NOSLOT_MASK 
     	    || hfn==KVM_PFN_NOSLOT	|| hfn==KVM_PFN_ERR_FAULT 
 	    	|| hfn==KVM_PFN_ERR_HWPOISON || hfn==KVM_PFN_ERR_RO_FAULT) 
 			printk("PFN_ERR: 0x%llx\n", hfn);
 		else {
 			virtiop_device[dev_num].vq_desc_hfn  = hfn;
-			virtiop_device[dev_num].vq_avail_hfn = hfn+VQ_AVAIL_OFFSET;
-			virtiop_device[dev_num].vq_used_hfn  = hfn+VQ_USED_OFFSET;
+			virtiop_device[dev_num].vq_avail_hfn = hfn_avail;
+			virtiop_device[dev_num].vq_used_hfn  = hfn_used;
 		}
-		printk("gfn=0x%llx, pfn=0x%llx writeable=%d\n", *(gfn_t*)val, hfn, writeable);
-		int tmp;
-		tmp = readl(target);
-		printk("tmp=%x\n", tmp);
+		printk("desc=0x%x, avail=0x%x, used=0x%x\n", hfn, hfn_avail, hfn_used);
 		writel((u32)hfn, target);
-		tmp = readl(target);
-		printk("tmp=%x\n", tmp);
+*/
 	}
 	else if(offset == VIRTIO_MMIO_QUEUE_NOTIFY) {
 		/* Guest kick, translate all GPA in description table into PA */
@@ -290,9 +334,8 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 							     virtiop_device[dev_num].vq_used_hfn);
 		printk("vq_translate_gpa_pa done\n");
 
-		printk("virtiop kick\n");
-//		writel(*(int*)val, target);
-		irq_to_guest(39, NULL);
+		writel(*(int*)val, target);
+//		irq_to_guest(39, NULL);
 	}
 	else
 		writel(*(int*)val, target);

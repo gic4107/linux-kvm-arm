@@ -280,6 +280,8 @@ add_head:
 	avail = (vq->vring.avail->idx & (vq->vring.num-1));
 	vq->vring.avail->ring[avail] = head;
 
+//	vq->vring.desc[1].len = 17;
+
 	/* Descriptors and available array need to be set before we expose the
 	 * new available array entries. */
 	virtio_wmb(vq->weak_barriers);

@@ -3,8 +3,8 @@
 #define HOST_VQ_PFN	  0x8f7e7c
 #define VIRTIO_BLK_QUEUE_SIZE 256
 
-#define VQ_AVAIL_OFFSET 1
-#define VQ_USED_OFFSET  2
+#define VQ_AVAIL_GFN_OFFSET 1
+#define VQ_USED_GFN_OFFSET  2
 
 #define DESC_NUM 10                                                              
 #define NAME_LEN 30                                                              
