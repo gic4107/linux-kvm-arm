@@ -15,9 +15,9 @@ struct kvm_virtiop_device {
 	u8			mmio_irq;
 	struct kvm_io_device dev;
 	struct kvm *kvm;
-	pfn_t		vq_desc_pfn;				// set when guest write VIRTIO_MMIO_QUEUE_PFN
-	pfn_t       vq_avail_pfn;
-	pfn_t		vq_used_pfn;
+	hfn_t		vq_desc_hfn;				// set when guest write VIRTIO_MMIO_QUEUE_PFN
+	hfn_t       vq_avail_hfn;
+	hfn_t		vq_used_hfn;
 	void*       host_dev;
 };
 
