@@ -247,6 +247,7 @@ static irqreturn_t vm_interrupt(int irq, void *opaque)
 	/* Read and acknowledge interrupts */
 	status = readl(vm_dev->base + VIRTIO_MMIO_INTERRUPT_STATUS);
 	writel(status, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
+	printk("host read status=%d\n", status);
 
 	if (unlikely(status & VIRTIO_MMIO_INT_CONFIG)
 			&& vdrv && vdrv->config_changed) {

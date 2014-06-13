@@ -1,0 +1,300 @@
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index b3138fb..be82620 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -170,4 +170,7 @@ source "drivers/phy/Kconfig"
+ 
+ source "drivers/powercap/Kconfig"
+ 
++# gic4107
++source "drivers/interrupt_distributor/Kconfig"
++
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 3cc8214..e0b3225 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -155,3 +155,6 @@ obj-$(CONFIG_IPACK_BUS)		+= ipack/
+ obj-$(CONFIG_NTB)		+= ntb/
+ obj-$(CONFIG_FMC)		+= fmc/
+ obj-$(CONFIG_POWERCAP)		+= powercap/
++
++# Interrupt distributor
++obj-$(CONFIG_INT_DST) += interrupt_distributor/
+diff --git a/drivers/interrupt_distributor/Kconfig b/drivers/interrupt_distributor/Kconfig
+new file mode 100644
+index 0000000..32274bb
+--- /dev/null
++++ b/drivers/interrupt_distributor/Kconfig
+@@ -0,0 +1,2 @@
++config INT_DST
++       tristate "VirtioP interrupt distributor"
+diff --git a/drivers/interrupt_distributor/Makefile b/drivers/interrupt_distributor/Makefile
+new file mode 100644
+index 0000000..2a49435
+--- /dev/null
++++ b/drivers/interrupt_distributor/Makefile
+@@ -0,0 +1,6 @@
++obj-$(CONFIG_INT_DST) += interrupt_distributor.o
++#KVERSION = $(shell uname -r)
++#all:
++#	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
++#clean:
++#	make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
+diff --git a/drivers/interrupt_distributor/interrupt_distributor.c b/drivers/interrupt_distributor/interrupt_distributor.c
+new file mode 100644
+index 0000000..7432b64
+--- /dev/null
++++ b/drivers/interrupt_distributor/interrupt_distributor.c
+@@ -0,0 +1,147 @@
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/fs.h>
++#include <linux/string.h>
++#include <linux/slab.h>
++#include <asm/uaccess.h>
++#include <linux/interrupt.h>
++#include <linux/list.h>
++#include <linux/kvm_host.h>
++#include <linux/file.h>
++#include <linux/interrupt_distributor_uapi.h>
++
++#define DESC_NUM 10
++#define NAME_LEN 30
++#define DEVICE_NAME "interrupt distributor"
++
++#define hash_fn(dev_id) (unsigned int)((dev_id>>2)%DESC_NUM)
++
++static int major_num;
++struct list_head *irq_desc_hash;	// hash table array
++
++struct irq_desc_t {
++	unsigned int irq;
++	irq_handler_t handler;
++	unsigned long flags;
++	char name[NAME_LEN];
++	void *dev;
++	struct list_head node;
++};
++int desc_count = 0;
++
++static irqreturn_t distributor(int irq, void* dev_id)
++{
++	int hash_value = hash_fn((unsigned long)dev_id);
++	struct list_head *hash_head = &irq_desc_hash[hash_value];
++//	printk("distributor function ... ");
++//	printk("dev_id=0x%llx, hash value=%d\n", dev_id, hash_fn((unsigned long)dev_id));
++	struct irq_desc_t *irq_desc;
++	list_for_each_entry(irq_desc, hash_head, node) {
++		if(irq_desc->dev == dev_id)
++			return irq_desc->handler(irq, dev_id); 
++	}
++}
++
++int register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
++{
++	int hash_value = hash_fn((unsigned long)dev);
++	printk("register_irq ... irq=%d, name=%s, hash=%lu", irq, name, hash_fn((unsigned long)dev));
++	struct list_head *hash_head = &irq_desc_hash[hash_value];
++	struct irq_desc_t *irq_desc = kmalloc(sizeof(struct irq_desc_t), GFP_KERNEL);		
++	if(list_empty(hash_head)) {
++		printk("irq_desc_hash[%d] null\n", hash_value);
++		irq_desc->irq = irq;
++		irq_desc->handler = handler;
++		irq_desc->flags = flags;
++		irq_desc->dev = dev;
++		strcpy(irq_desc->name, name);	 
++		list_add(&(irq_desc->node), hash_head);	
++	}
++	else {
++		printk("irq_desc_hash[%d] not null\n", hash_value);	
++		while(1) {
++			struct list_head *iter = hash_head->next;
++			if(list_is_last(iter, hash_head)) {
++				irq_desc->irq = irq;
++				irq_desc->handler = handler;
++				irq_desc->flags = flags;
++				irq_desc->dev = dev;
++				strcpy(irq_desc->name, name);	 
++				list_add(&(irq_desc->node), hash_head);	
++			}
++		}
++
++	}
++	desc_count++;
++	return request_irq(irq, distributor, flags, name, dev);
++}
++EXPORT_SYMBOL(register_irq);
++
++static long distributor_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
++{
++	void __user *argp = (void __user*)arg;
++	int r = -EFAULT;
++	switch(cmd) {
++	case SEND_IRQ_TO_GUEST: {
++		struct kvm_irq_target irq_target;
++		struct kvm_irq_level irq_level;
++	//	printk("CMD SEND_INT_TO_GUEST flip=%0xlx cmd=0x%lx\n", (void*)filp, cmd);	// filp different between different process
++
++		if(copy_from_user(&irq_target, argp, sizeof irq_target)) {
++			printk("distributor_ioctl: copy_from_user fail\n");
++			goto out;
++		}
++		struct fd f = fdget(irq_target.fd);
++		struct kvm *kvm = f.file->private_data;
++		irq_level.irq   = irq_target.irq;
++		irq_level.level = irq_target.level;
++	//	printk("kvm=0x%x irq=%d level=%d\n", (void*)kvm, irq_level.irq, irq_level.level);
++		r = kvm_vm_ioctl_irq_line(kvm, &irq_level, 0);
++		break;
++	}
++	default: 
++		printk("unknowned ioctl cmd\n");
++		break;
++	}
++
++out:
++	return r;
++}
++
++static const struct file_operations distributor_fops = {
++	.owner          = THIS_MODULE,
++//	.open           = distributor_open,
++	.unlocked_ioctl = distributor_ioctl,
++//	.release        = 
++};
++
++static int __init distributor_init(void) {
++	printk("/****** Interrupt Distributor ******/ : ");
++	int i;
++	major_num = register_chrdev(0, DEVICE_NAME, &distributor_fops);
++	if(major_num < 0) {
++		printk("interrupt distributor could not get major number\n");
++		return major_num;
++	}
++	printk("major_num=%d\n", major_num);
++	irq_desc_hash = kmalloc(DESC_NUM*sizeof(struct list_head), GFP_KERNEL);
++	if(!irq_desc_hash) {
++		printk("irq_desc_hash allocate fail\n");
++		goto out;
++	}	
++	for(i=0; i<DESC_NUM; i++)
++		INIT_LIST_HEAD(&(irq_desc_hash[i]));
++out:
++	return 0;
++}
++fs_initcall(distributor_init);
++
++static void __exit distributor_exit(void) {
++	printk("/****** Exit INterrupt Distributor ******/\n");
++	unregister_chrdev(major_num, DEVICE_NAME);
++}
++module_exit(distributor_exit);
++
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Yu-Ju Huang gic4107@gmail.com");
+diff --git a/drivers/interrupt_distributor/interrupt_distributor.h b/drivers/interrupt_distributor/interrupt_distributor.h
+new file mode 100644
+index 0000000..f5d83dc
+--- /dev/null
++++ b/drivers/interrupt_distributor/interrupt_distributor.h
+@@ -0,0 +1,7 @@
++#ifndef __INTERRUPT_DISTRIBUTOR_H
++#define __INTERRUPT_DISTRIBUTOR_H
++
++#include <linux/kvm_host.h>
++extern int register_irq(unsigned int,irq_handler_t,unsigned long,const char*,void*);
++
++#endif
+diff --git a/drivers/interrupt_distributor/test.c b/drivers/interrupt_distributor/test.c
+new file mode 100644
+index 0000000..71adfe5
+--- /dev/null
++++ b/drivers/interrupt_distributor/test.c
+@@ -0,0 +1,12 @@
++#include <stdio.h>
++#include <fcntl.h>
++#include "../../include/uapi/linux/interrupt_distributor.h"
++//#include "interrupt_distributor.h"
++
++int main()
++{
++	int fd = open("/dev/isr_dst", O_RDWR);
++	if(fd<0)
++		printf("fd<0\n");
++	ioctl(fd, SEND_IRQ_TO_GUEST, 0);
++}
+diff --git a/drivers/interrupt_distributor/test/test.c b/drivers/interrupt_distributor/test/test.c
+new file mode 100644
+index 0000000..b5f2d8f
+--- /dev/null
++++ b/drivers/interrupt_distributor/test/test.c
+@@ -0,0 +1,11 @@
++#include <stdio.h>
++#include <fcntl.h>
++#include "../../../include/uapi/linux/interrupt_distributor_uapi.h"
++
++int main()
++{
++	int fd = open("/dev/isr_dst", O_RDWR);
++	if(fd<0)
++		printf("fd<0\n");
++	ioctl(fd, SEND_IRQ_TO_GUEST, 0);
++}
+diff --git a/drivers/virtio/virtio_mmio.c b/drivers/virtio/virtio_mmio.c
+index c600ccf..290b9c0 100644
+--- a/drivers/virtio/virtio_mmio.c
++++ b/drivers/virtio/virtio_mmio.c
+@@ -100,7 +100,8 @@
+ #include <linux/virtio_config.h>
+ #include <linux/virtio_mmio.h>
+ #include <linux/virtio_ring.h>
+-
++// gic4107
++#include "../../drivers/interrupt_distributor/interrupt_distributor.h"
+ 
+ 
+ /* The alignment to use between consumer and producer parts of vring.
+@@ -401,8 +402,15 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned nvqs,
+ 	unsigned int irq = platform_get_irq(vm_dev->pdev, 0);
+ 	int i, err;
+ 
++/* gic4107 interrupt distributor */
++#ifdef CONFIG_INT_DST
++	printk("virtio block call register_irq\n");
++	err = register_irq(irq, vm_interrupt, IRQF_SHARED, 
++			dev_name(&vdev->dev), vm_dev);
++#else
+ 	err = request_irq(irq, vm_interrupt, IRQF_SHARED,
+ 			dev_name(&vdev->dev), vm_dev);
++#endif
+ 	if (err)
+ 		return err;
+ 
+diff --git a/include/uapi/linux/interrupt_distributor_uapi.h b/include/uapi/linux/interrupt_distributor_uapi.h
+new file mode 100644
+index 0000000..229811b
+--- /dev/null
++++ b/include/uapi/linux/interrupt_distributor_uapi.h
+@@ -0,0 +1,20 @@
++#ifndef __INTERRUPT_DISTRIBUTOR_UAPI_H
++#define __INTERRUPT_DISTRIBUTOR_UAPI_H
++
++#include <linux/kvm.h>
++#include <linux/types.h>
++#define IRQ_DST_IO      0xE0
++
++struct kvm_irq_target {
++	int fd;
++	union {
++		__u32 irq;
++		__s32 status;
++	};
++	__u32 level;
++};
++
++/* user space IOCTL command */
++#define SEND_IRQ_TO_GUEST _IOW(IRQ_DST_IO, 0x60, struct kvm_irq_level)
++
++#endif
