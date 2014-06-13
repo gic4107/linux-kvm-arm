@@ -41,3 +41,52 @@ static inline bool virt_queue__available(struct virt_queue *vq)
     return vq->vring.avail->idx !=  vq->last_avail_idx;
 }    
 
+static int reset_vring(pfn_t vq_desc_hfn, pfn_t vq_avail_hfn, pfn_t vq_used_hfn)
+{
+    struct page *page_desc, *page_avail, *page_used;
+    struct vring_desc *vq_desc;
+	struct vring_avail *vq_avail;
+	struct vring_used *vq_used; 
+    u16 head; 
+	struct virt_queue *vq;
+                                                                                 
+	printk("reset_vring\n");
+    page_desc = pfn_to_page(vq_desc_hfn);            
+    if(!page_desc) {                                                         
+        printk("desc page null\n");                                          
+        return -1;                                                           
+    }                                                                        
+    vq_desc = (struct vring_desc*)kmap(page_desc);                                               
+    if(!vq_desc) {                                                           
+        printk("vq_desc null\n");                                            
+        return -1;                                                           
+    }                                                                        
+    page_avail = pfn_to_page(vq_avail_hfn);          
+    if(!page_avail) {                                                        
+        printk("avail page null\n");                                         
+        return -1;                                                           
+    }                                                                        
+    vq_avail = (struct vring_avail*)kmap(page_avail);                                             
+    if(!vq_avail) {                                                          
+        printk("vq_avail null\n");                                           
+        return -1;                                                           
+    }                                                                        
+    page_used = pfn_to_page(vq_used_hfn);          
+    if(!page_used) {                                                        
+        printk("used page null\n");                                         
+        return -1;                                                           
+    }                                                                        
+    vq_used = (struct vring_uesd*)kmap(page_used);                                             
+    if(!vq_used) {                                                          
+        printk("vq_used null\n");                                           
+        return -1;                                                           
+    }                                                                        
+    printk("vq_desc=0x%lx, vq_avail=0x%lx, vq_used=0x%lx\n", (unsigned long)vq_desc, (unsigned long)vq_avail, (unsigned long)vq_used);
+
+	vq_avail->idx = 0;
+	vq_used->idx  = 0;
+
+	kunmap(vq_used);
+	kunmap(vq_avail);
+	kunmap(vq_desc);
+}

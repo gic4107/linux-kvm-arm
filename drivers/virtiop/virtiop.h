@@ -6,18 +6,21 @@
 #define VQ_AVAIL_GFN_OFFSET 1
 #define VQ_USED_GFN_OFFSET  2
 
-#define DESC_NUM 10                                                              
-#define NAME_LEN 30                                                              
 #define DEVICE_NAME "VirtioP"
-                                                                                 
-#define hash_fn(dev_id) (unsigned int)((dev_id>>2)%DESC_NUM)                     
+#define HOST_DEV_NUM 10
 
-struct irq_desc_t {                                                              
-    unsigned int irq;                                                            
-    irq_handler_t handler;                                                    
-    unsigned long flags;                                                         
-    char name[NAME_LEN];                                                         
-    void *dev;                                                                   
-    struct list_head node;
+struct host_device {
+	void *dev;
+	void *queue;
+	char name[30];
+	struct irq_desc {
+	    unsigned int irq;                                                            
+	    irq_handler_t handler;                                                    
+	    unsigned long flags;                                                         
+	} irqd;
+	int guest_dev;
+	int guest_start;
 };
+
+struct host_device host_dev[HOST_DEV_NUM];
 

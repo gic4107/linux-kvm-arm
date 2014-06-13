@@ -388,6 +388,10 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	list_add(&info->node, &vm_dev->virtqueues);
 	spin_unlock_irqrestore(&vm_dev->lock, flags);
 
+#ifdef CONFIG_VIRTIOP
+	virtiop_register_host_dev_vq(vm_dev, virt_to_phys(info->queue));
+#endif
+
 	return vq;
 
 error_new_virtqueue:
@@ -412,7 +416,7 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 	/* VirtioP interrupt distributor */                                                 
 #ifdef CONFIG_VIRTIOP                                                          
     printk("virtio block call register_irq\n"); 
-    err = register_irq(irq, vm_interrupt, IRQF_SHARED,                              
+    err = virtiop_register_irq(irq, vm_interrupt, IRQF_SHARED,                              
             dev_name(&vdev->dev), vm_dev);                                          
 #else                                                                               
     err = request_irq(irq, vm_interrupt, IRQF_SHARED,                               

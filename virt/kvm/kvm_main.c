@@ -2497,10 +2497,10 @@ static long kvm_vm_ioctl(struct file *filp,
         case KVM_VIRTIOP_BIND_DISK: {
                 struct kvm_virtiop_bind_device bind_device;
                 int err;
-
+				
+                printk("KVM_VIRTIOP_BIND_DISK\n");
                 if(copy_from_user(&bind_device, argp, sizeof bind_device))
                         return -EFAULT;
-                printk("KVM_VIRTIOP_BIND_DISK\n");
                 err = kvm_assign_vmmio(kvm, &bind_device);
                 break;
        }

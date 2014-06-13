@@ -12,20 +12,29 @@
 #include "vring.h"
 #include "virtiop.h"
 
+// for debug
+#include <linux/virtio_blk.h>
+
 #define VIRTIO_IRQ_LOW      0                                                    
 #define VIRTIO_IRQ_HIGH     1 
+
+// Need modify
+#define HOST_DEV 0
                 
-struct list_head *irq_desc_hash;    // hash table array                          
-                                                                                 
 int stage2_set_pte(struct kvm *kvm, struct kvm_mmu_memory_cache *cache, 
 			phys_addr_t addr, const pte_t *new_pte, bool iomap);
+void kvm_set_page_dirty(struct page *page);
+static inline void kvm_set_s2pte_writable(pte_t *pte)                            
+{                                                                                
+	    pte_val(*pte) |= PTE_S2_RDWR; 
+}
 
 struct kvm_virtiop_device virtiop_device[VIRTIOP_DEVICE_ARRAY_SIZE];
 int virtiop_device_count = 0;
-int desc_count = 0;
+int host_dev_count = 0;
 const int dev_num = 0;				// Just for now, only one device
 
-int guest_start = 0;
+u64 debug_desc_gfn, debug_avail_gfn, debug_used_gfn;
 
 hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 {
@@ -41,29 +50,11 @@ hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 	hfn = gfn_to_pfn_prot(kvm, gfn, 1, &writeable);
 	hpa = __pfn_to_phys(hfn) + offset;
 
-/*
-    struct page *page;
-	void* kv_page;
-    page = pfn_to_page(hfn);            
-    if(!page) {                                                         
-        printk("page null\n");                                          
-        return -1;                                                           
-    }                                                                        
-    kv_page = kmap(page);                                               
-    if(!kv_page) {                                                           
-        printk("kv_page null\n");                                            
-		return -1;                                                           
-	}
-	printk("dump data\n");
-	unsigned char* i;
-	for(i=kv_page; i<kv_page+len; i++) 
-		printk("%c", *i);
-	printk("\n");
-	for(i=kv_page; i<kv_page+len; i++) 
-		printk("%x", *i);
-	printk("\n");
-	kunmap(kv_page);	
-*/
+	struct page *page = phys_to_page(hpa);
+	void *kva = kmap(page);
+    struct virtio_blk_outhdr *hdr = (struct virtio_blk_outhdr*)(kva+offset);    
+	printk("type=0x%x, ioprio=0x%x, sector=0x%llx\n", hdr->type, hdr->ioprio, hdr->sector);
+
 	printk("offset=0x%llx, gfn=0x%llx, hfn=0x%llx, hpa=0x%llx\n", offset, gfn, hfn, hpa);
 	printk("==================================\n");
 
@@ -106,8 +97,8 @@ u16 virt_queue__get_head_iov(struct virt_queue *vq, u16 head, struct kvm *kvm)
         }                                                                       
         printk("\n");   
 
-//		iov_hpa  = translate_gpa_pa(kvm, iov_gpa, iov_len);
-//		desc[idx].addr = iov_hpa;
+		iov_hpa  = translate_gpa_pa(kvm, iov_gpa, iov_len);
+		desc[idx].addr = iov_hpa;
     } while ((idx = next_desc(desc, idx, max)) != max);                          
                                                                                  
     return head;                                                                 
@@ -154,34 +145,20 @@ int vq_translate_gpa_pa(struct kvm *kvm, pfn_t vq_desc_hfn,
 	printk("desc_hfn=0x%x, avail_hfn=0x%x, used_hfn=0x%x\n", vq_desc_hfn, vq_avail_hfn, vq_used_hfn);
     printk("vq_desc=0x%lx, vq_avail=0x%lx, vq_used=0x%lx\n", (unsigned long)vq_desc, (unsigned long)vq_avail, (unsigned long)vq_used);
 
-/*	vq = kmalloc(sizeof(struct virt_queue), GFP_KERNEL);	
+	vq = kmalloc(sizeof(struct virt_queue), GFP_KERNEL);	
 	vq->vring.desc  = vq_desc;
 	vq->vring.avail = vq_avail;
 	vq->vring.used  = vq_used;
 	vq->vring.num   = VIRTIO_BLK_QUEUE_SIZE;
 	vq->last_avail_idx = 0;
-*/
-	struct vring_desc *desc = (struct desc*)vq_desc;
-	int i;
-	for(i=0; i<3; i++) {
-   	    int j = 0;                                                              
-    	unsigned char *c = &desc[i];    
-	    while(1) {                                                              
-	        printk("%x ", *c);                                                  
-	        j++;                                                                
-			c++;
-	        if(j==16)   break;                                                  
-	    }                                                                       
-	    printk("\n");   
-	}
 
-//    while (virt_queue__available(vq)) {
-//        head        = virt_queue__pop(vq);
-//		printk("vq_translate_gpa_pa, head=%d\n", head);
-//        virt_queue__get_head_iov(vq, head, kvm);
-//    }	
+    while (virt_queue__available(vq)) {
+        head        = virt_queue__pop(vq);
+		printk("vq_translate_gpa_pa, head=%d\n", head);
+        virt_queue__get_head_iov(vq, head, kvm);
+    }	
 
-//	kfree(vq);
+	kfree(vq);
 	kunmap(vq_used);
 	kunmap(vq_avail);
 	kunmap(vq_desc);
@@ -201,11 +178,11 @@ static irqreturn_t irq_to_guest(int irq, void* opaque)
         .irq    = KVM_IRQCHIP_IRQ(irq),                                             
         .level  = !!VIRTIO_IRQ_HIGH,                                                              
     };                                                                              
-    printk("irq_to_guest irq=%x level=%d\n", irq_level.irq, irq_level.level);           // 39
+    printk("irq_to_guest irq=0x%x level=%d\n", irq_level.irq, irq_level.level);           // 39
     r = kvm_vm_ioctl_irq_line(kvm, &irq_level, 0);                                  
                                                                                     
     irq_level.level = !!VIRTIO_IRQ_LOW;                                             
-    printk("irq_to_guest irq=%x level=%d\n", irq_level.irq, irq_level.level);           // 39
+    printk("irq_to_guest irq=0x%x level=%d\n", irq_level.irq, irq_level.level);           // 39
     r = kvm_vm_ioctl_irq_line(kvm, &irq_level, 0);                                  
 //    printk("irq_to_guest done\n");                                                  
                                                                                     
@@ -225,20 +202,19 @@ static void set_irq_to_guest(void)
 } 
 */                                                                               
      
-int register_virtiop_mmio_range(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
+int virtiop_register_mmio_range(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
 {
+	host_dev[HOST_DEV].guest_dev = virtiop_device_count;
+	host_dev[HOST_DEV].guest_start = 1;
 	virtiop_device[virtiop_device_count].kvm        = kvm;
 	virtiop_device[virtiop_device_count].mmio_gpa   = bind_device->mmio_gpa;
 	virtiop_device[virtiop_device_count].mmio_irq   = bind_device->mmio_irq;
 	virtiop_device[virtiop_device_count++].mmio_len = bind_device->mmio_len;
-//	set_irq_to_guest();
-	printk("guest_start\n");
-	guest_start = 1;
 
 	return 1;
 }
 
-void deregister_virtiop_mmio_range(struct kvm_virtiop_bind_device *bind_device)
+void virtiop_deregister_mmio_range(struct kvm_virtiop_bind_device *bind_device)
 {
 	/* Do nothing for now */
 }
@@ -288,25 +264,45 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 		u64 desc_gpa, avail_gpa, used_gpa;
 		u64 queue_pfn = *(u64*)val;
 
-		host_desc_pte  = pfn_pte(HOST_VQ_PFN, PAGE_S2);
-		host_avail_pte = pfn_pte(HOST_VQ_PFN+1, PAGE_S2);
-		host_used_pte  = pfn_pte(HOST_VQ_PFN+2, PAGE_S2);
+		hfn_t host_vq_pfn = (unsigned long)(host_dev[HOST_DEV].queue) >> 12;	
+		printk("host_vq_pfn = 0x%x\n", host_vq_pfn);
+
+		host_desc_pte  = pfn_pte(host_vq_pfn, PAGE_S2);
+		host_avail_pte = pfn_pte(host_vq_pfn+1, PAGE_S2);
+		host_used_pte  = pfn_pte(host_vq_pfn+2, PAGE_S2);
+        kvm_set_s2pte_writable(&host_desc_pte);                                                                                                                                  
+        kvm_set_s2pte_writable(&host_avail_pte);                                                                                                                                  
+        kvm_set_s2pte_writable(&host_used_pte);                                                                                                                                  
+        kvm_set_pfn_dirty(host_vq_pfn);
+        kvm_set_pfn_dirty(host_vq_pfn+1);
+        kvm_set_pfn_dirty(host_vq_pfn+2);
 
 		desc_gpa  = queue_pfn<<PAGE_SHIFT;
 		avail_gpa = (queue_pfn+1)<<PAGE_SHIFT;
 		used_gpa  = (queue_pfn+2)<<PAGE_SHIFT;
 
+		debug_desc_gfn  = queue_pfn;
+		debug_avail_gfn = queue_pfn+1;
+		debug_used_gfn  = queue_pfn+2;
+
 		int ret;
 		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, desc_gpa, &host_desc_pte, false);
-		printk("stage2_set_pte, ret=%d\n", ret);
+//		printk("stage2_set_pte, ret=%d\n", ret);
 		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, avail_gpa, &host_avail_pte, false);
-		printk("stage2_set_pte, ret=%d\n", ret);
+//		printk("stage2_set_pte, ret=%d\n", ret);
 		ret = stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, used_gpa, &host_used_pte, false);
-		printk("stage2_set_pte, ret=%d\n", ret);
+//		printk("stage2_set_pte, ret=%d\n", ret);
 
-		virtiop_device[dev_num].vq_desc_hfn  = HOST_VQ_PFN;
-		virtiop_device[dev_num].vq_avail_hfn = HOST_VQ_PFN+1; 
-		virtiop_device[dev_num].vq_used_hfn  = HOST_VQ_PFN+2;
+		virtiop_device[dev_num].vq_desc_hfn  = host_vq_pfn;
+		virtiop_device[dev_num].vq_avail_hfn = host_vq_pfn+1;
+		virtiop_device[dev_num].vq_used_hfn  = host_vq_pfn+2;
+
+		reset_vring(virtiop_device[dev_num].vq_desc_hfn, 
+								 virtiop_device[dev_num].vq_avail_hfn,
+							     virtiop_device[dev_num].vq_used_hfn);
+
+		printk("GPA: desc=0x%llx, avail=0x%llx, used=0x%llx\n", desc_gpa, avail_gpa, used_gpa);
+		printk("desc=0x%x, avail=0x%x, used=0x%x\n", host_vq_pfn, host_vq_pfn+1, host_vq_pfn+2);
 
 		/* Method2: Change host's VQ to where guest set */
 /*		bool writeable;
@@ -356,11 +352,18 @@ const struct kvm_io_device_ops virtiop_ops = {
 
 static irqreturn_t interrupt_distribute(int irq, void* dev_id)                            
 {                                                                                
-    int hash_value = hash_fn((unsigned long)dev_id);                             
-    struct list_head *hash_head = &irq_desc_hash[hash_value];                    
-//  printk("dev_id=0x%llx, hash value=%d\n", dev_id, hash_fn((unsigned long)dev_id));
-    struct irq_desc_t *irq_desc;                                                 
-
+	int i;
+//	printk("interrupt_distribute, irq=%d\n", irq);
+	for(i=0; i<host_dev_count; i++) {
+		if(host_dev[i].dev == dev_id) {
+			struct host_device hdev = host_dev[i];
+			hdev.irqd.handler(hdev.irqd.irq, dev_id);
+			if(hdev.guest_start) {
+				irq_to_guest(virtiop_device[hdev.guest_dev].mmio_irq, dev_id);
+			}
+		}
+	}
+/*
 	if(guest_start) {
 		u8 guest_irq = virtiop_device[dev_num].mmio_irq; 	
 		irq_to_guest(guest_irq, virtiop_device[dev_num].host_dev);	
@@ -369,66 +372,38 @@ static irqreturn_t interrupt_distribute(int irq, void* dev_id)
         if(irq_desc->dev == dev_id)                                              
 	        return irq_desc->handler(irq, dev_id);     
     }                                                      
-//	printk("interrupt_distribute, irq=%d, guest_start=%d\n", irq, guest_start);		// 39. 1
+*/
 } 
 
-int register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
-{                                                                                
-    int hash_value = hash_fn((unsigned long)dev);                                
-    printk("register_irq ... irq=%d, name=%s, hash=%u", irq, name, hash_fn((unsigned long)dev));
-    struct list_head *hash_head = &irq_desc_hash[hash_value];                    
-    struct irq_desc_t *irq_desc = kmalloc(sizeof(struct irq_desc_t), GFP_KERNEL);       
+void virtiop_register_host_dev_vq(void *dev, void *queue)
+{
+	host_dev[host_dev_count++].queue = queue;	
+}
 
-    if(list_empty(hash_head)) {                                                  
-        printk("irq_desc_hash[%d] null\n", hash_value);                          
-        irq_desc->irq = irq;                                                     
-        irq_desc->handler = handler;
-        irq_desc->flags = flags;                                                 
-        irq_desc->dev = dev;                                                     
-        strcpy(irq_desc->name, name);                                            
-        list_add(&(irq_desc->node), hash_head);                                  
-    }                                                                            
-    else {                                                                       
-        printk("irq_desc_hash[%d] not null\n", hash_value);                      
-        while(1) {                                                               
-            struct list_head *iter = hash_head->next;                            
-            if(list_is_last(iter, hash_head)) {                                  
-                irq_desc->irq = irq;                                             
-                irq_desc->handler = handler;                                     
-                irq_desc->flags = flags;                                         
-                irq_desc->dev = dev;                                             
-                strcpy(irq_desc->name, name);                                    
-                list_add(&(irq_desc->node), hash_head);                          
-            }                                                                    
-        }                                                                        
-                                                                                 
-    }                                                                            
-    desc_count++;                                                                
+int virtiop_register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
+{                                                                                
+	host_dev[host_dev_count].irqd.irq = irq;
+	host_dev[host_dev_count].irqd.handler = handler;
+	host_dev[host_dev_count].irqd.flags = flags;
+	host_dev[host_dev_count].dev = dev;
+	strcpy(host_dev[host_dev_count].name, name);
 
 	virtiop_device[dev_num].host_dev = dev;
     return request_irq(irq, interrupt_distribute, flags, name, dev);      
 }                                                                  
 
+/*
 static int __init virtiop_init(void) {                                          
-    printk("/****** VirtioP Init ******/ : ");                             
-	int i;
 
-    irq_desc_hash = kmalloc(DESC_NUM*sizeof(struct list_head), GFP_KERNEL);         
-    if(!irq_desc_hash) {                                                            
-        printk("irq_desc_hash allocate fail\n");                                    
-        goto out;                                                                   
-    }                                                                               
-    for(i=0; i<DESC_NUM; i++)                                                       
-        INIT_LIST_HEAD(&(irq_desc_hash[i]));                                        
 out:                                                                                
     return 0;                                                                       
 }                                                                                   
 fs_initcall(virtiop_init);                                                      
                                                                                     
 static void __exit virtiop_exit(void) {                                         
-    printk("/****** Exit VirtioP ******/\n");                         
 }                                                                                   
 module_exit(virtiop_exit);                                                      
                                                                                     
 MODULE_LICENSE("GPL v2");                                                           
 MODULE_AUTHOR("Yu-Ju Huang gic4107@gmail.com");  
+*/
