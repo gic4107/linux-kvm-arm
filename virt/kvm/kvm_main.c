@@ -1114,7 +1114,6 @@ static bool hva_to_pfn_fast(unsigned long addr, bool atomic, bool *async,
 	struct page *page[1];
 	int npages;
 	
-//	printk("hva_to_pfn_fast\n");
 	if (!(async || atomic))
 		return false;
 
@@ -1148,7 +1147,6 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 	struct page *page[1];
 	int npages = 0;
 
-//	printk("hva_to_pfn_slow:");
 	might_sleep();
 
 	if (writable)
@@ -1160,10 +1158,8 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 					      addr, write_fault, page);
 		up_read(&current->mm->mmap_sem);
 	} else {
-//		printk("call get_user_pages_fast:");
 		npages = get_user_pages_fast(addr, 1, write_fault,
 					     page);
-//		printk("npages=%d\n", npages);	yes in virtiop set PFN
 	}
 	if (npages != 1)
 		return npages;
@@ -1217,19 +1213,16 @@ static pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool *async,
 	pfn_t pfn = 0;
 	int npages;
 
-//	printk("in hva_to_pfn\n");
 	/* we can do it either atomically or asynchronously, not both */
 	BUG_ON(atomic && async);
 
 	if (hva_to_pfn_fast(addr, atomic, async, write_fault, writable, &pfn))
 		return pfn;
 
-//	printk("finish find_fast\n");
 	if (atomic)
 		return KVM_PFN_ERR_FAULT;
 
 	npages = hva_to_pfn_slow(addr, async, write_fault, writable, &pfn);
-//	printk("finish find_slow\n");
 	if (npages == 1)
 		return pfn;
 
@@ -1242,7 +1235,6 @@ static pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool *async,
 
 	vma = find_vma_intersection(current->mm, addr, addr + 1);
 
-//	printk("finish find_vam_intersection\n");
 	if (vma == NULL)
 		pfn = KVM_PFN_ERR_FAULT;
 	else if ((vma->vm_flags & VM_PFNMAP)) {
@@ -1265,16 +1257,11 @@ __gfn_to_pfn_memslot(struct kvm_memory_slot *slot, gfn_t gfn, bool atomic,
 {
 	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
 
-//	printk("gpn_to_hva=0x%llx\n", addr);
-	if (addr == KVM_HVA_ERR_RO_BAD) {
-		printk("KVM_PFN_ERR_RO_FAULT\n");
+	if (addr == KVM_HVA_ERR_RO_BAD) 
 		return KVM_PFN_ERR_RO_FAULT;
-	}
 
-	if (kvm_is_error_hva(addr)) {
-		printk("KVM_PFN_NOSLOT\n");
+	if (kvm_is_error_hva(addr)) 
 		return KVM_PFN_NOSLOT;
-	}
 
 	/* Do not map writable pfn in the readonly memslot. */
 	if (writable && memslot_is_readonly(slot)) {
@@ -2498,7 +2485,6 @@ static long kvm_vm_ioctl(struct file *filp,
                 struct kvm_virtiop_bind_device bind_device;
                 int err;
 				
-                printk("KVM_VIRTIOP_BIND_DISK\n");
                 if(copy_from_user(&bind_device, argp, sizeof bind_device))
                         return -EFAULT;
                 err = kvm_assign_vmmio(kvm, &bind_device);
@@ -2872,14 +2858,6 @@ static int __kvm_io_bus_write(struct kvm_io_bus *bus,
 
 	while (idx < bus->dev_count &&
 		kvm_io_bus_cmp(range, &bus->range[idx]) == 0) {
-/*		printk("call kvm_iodevice_write ... ");
-		if(bus->range[idx].dev == NULL)
-			printk("dev null\n");
-		else if (bus->range[idx].dev->ops == NULL)
-			printk("ops null\n");
-		else if (bus->range[idx].dev->ops->write == NULL)
-			printk("write null\n");
-*/
 		if (!kvm_iodevice_write(bus->range[idx].dev, range->addr,
 					range->len, val))
 			return idx;
@@ -3007,7 +2985,6 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 {
 	struct kvm_io_bus *new_bus, *bus;
 
-	printk("kvm_io_bus_register_dev, gpa=0x%llx\n", addr);
 	bus = kvm->buses[bus_idx];
 	/* exclude ioeventfd which is limited by maximum fd */
 	if (bus->dev_count - bus->ioeventfd_count > NR_IOBUS_DEVS - 1) 

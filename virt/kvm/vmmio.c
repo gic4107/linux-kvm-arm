@@ -7,7 +7,6 @@
 #include <linux/virtio.h>
 #include <linux/virtiop.h>
 
-#define HOST_DEV_NAME "1c130000.virtio_block"
 extern struct bus_type virtio_bus;
 
 int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
