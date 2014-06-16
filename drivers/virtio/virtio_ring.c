@@ -783,6 +783,9 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 	vq->weak_barriers = weak_barriers;
 	vq->broken = false;
 	vq->last_used_idx = 0;
+#ifdef CONFIG_VIRTIOP
+	vq->last_used_idx = vq->vring.used->idx;
+#endif
 	vq->num_added = 0;
 	list_add_tail(&vq->vq.list, &vdev->vqs);
 #ifdef DEBUG
