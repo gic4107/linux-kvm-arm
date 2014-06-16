@@ -12,14 +12,12 @@
 #include "vring.h"
 #include "virtiop.h"
 
-// for debug
-#include <linux/virtio_blk.h>
-
 #define VIRTIO_IRQ_LOW      0                                                    
 #define VIRTIO_IRQ_HIGH     1 
 
-// Need modify
+// Only support one guest VM for now
 #define HOST_DEV 0
+#define VIRTIOP_DEV 0
                 
 int stage2_set_pte(struct kvm *kvm, struct kvm_mmu_memory_cache *cache, 
 			phys_addr_t addr, const pte_t *new_pte, bool iomap);
@@ -30,12 +28,10 @@ static inline void kvm_set_s2pte_writable(pte_t *pte)
 }
 
 struct kvm_virtiop_device virtiop_device[VIRTIOP_DEVICE_ARRAY_SIZE];
-int virtiop_device_count = 0;
+int virtiop_dev_count = 0;
 int host_dev_count = 0;
-const int dev_num = 0;				// Just for now, only one device
 
-u64 debug_desc_gfn, debug_avail_gfn, debug_used_gfn;
-
+/* Translate one description table entry's GPA to PA */
 hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 {
 	hpa_t hpa;
@@ -58,6 +54,7 @@ hpa_t translate_gpa_pa(struct kvm *kvm, gpa_t gpa, int len)
 	return hpa;
 }
 
+/* Parse virtqueue to get description table entry */
 u16 virt_queue__get_head_iov(struct virt_queue *vq, u16 head, struct kvm *kvm)
 {                                                                                
     struct vring_desc *desc;                                                     
@@ -71,13 +68,6 @@ u16 virt_queue__get_head_iov(struct virt_queue *vq, u16 head, struct kvm *kvm)
     max = vq->vring.num;                                                         
     desc = vq->vring.desc;                                                       
 
-/*                                                                                 
-    if (desc[idx].flags & VRING_DESC_F_INDIRECT) {                               
-        max = desc[idx].len / sizeof(struct vring_desc);                         
-        desc = guest_flat_to_host(kvm, desc[idx].addr);                          
-        idx = 0;                                                                 
-    }                                                                            
-*/                                                                              
 	unsigned char *c;
     do {    
         iov_len = desc[idx].len;                                 
@@ -89,6 +79,7 @@ u16 virt_queue__get_head_iov(struct virt_queue *vq, u16 head, struct kvm *kvm)
     return head;                                                                 
 }
 
+/* Translate GPA to PA, called when guest kick virtqueue */
 int vq_translate_gpa_pa(struct kvm *kvm, pfn_t vq_desc_hfn, 
 										 pfn_t vq_avail_hfn, pfn_t vq_used_hfn)
 {
@@ -129,9 +120,10 @@ int vq_translate_gpa_pa(struct kvm *kvm, pfn_t vq_desc_hfn,
 #define KVM_IRQCHIP_IRQ(x) (KVM_ARM_IRQ_TYPE_SPI << KVM_ARM_IRQ_TYPE_SHIFT) | \
                ((x) & KVM_ARM_IRQ_NUM_MASK)                                         
 
+/* Send IRQ to guest */
 static irqreturn_t irq_to_guest(int irq, void* opaque)  
 {                                                                                   
-    struct kvm *kvm = virtiop_device[dev_num].kvm;                                  
+    struct kvm *kvm = virtiop_device[VIRTIOP_DEV].kvm;                                  
     int r;                                                                          
                                                                                     
     struct kvm_irq_level irq_level = {                                              
@@ -146,29 +138,31 @@ static irqreturn_t irq_to_guest(int irq, void* opaque)
     return r;                                                                       
 } 
      
-int virtiop_register_mmio_range(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device)
+/* Called by KVM to bind guest's device to virtiop */
+int virtiop_register_mmio_range(struct kvm *kvm, void *virtiop_dev, struct kvm_virtiop_bind_device *bind_device)
 {
-	host_dev[HOST_DEV].guest_dev = virtiop_device_count;
-	host_dev[HOST_DEV].guest_start = 1;
+	int i;
+	for(i=0; i<VIRTIOP_DEVICE_ARRAY_SIZE; i++) {
+		if(virtiop_dev == host_dev[i].dev) {
+			host_dev[HOST_DEV].guest_dev = virtiop_dev_count;
+			host_dev[HOST_DEV].guest_start = 1;
+		}
+	}
 
-	virtiop_device[virtiop_device_count].kvm        = kvm;
-	virtiop_device[virtiop_device_count].mmio_gpa   = bind_device->mmio_gpa;
-	virtiop_device[virtiop_device_count].mmio_irq   = bind_device->mmio_irq;
-	virtiop_device[virtiop_device_count++].mmio_len = bind_device->mmio_len;
+	virtiop_device[virtiop_dev_count].kvm        = kvm;
+	virtiop_device[virtiop_dev_count].mmio_gpa   = bind_device->mmio_gpa;
+	virtiop_device[virtiop_dev_count].mmio_irq   = bind_device->mmio_irq;
+	virtiop_device[virtiop_dev_count++].mmio_len = bind_device->mmio_len;
 
 	return 1;
 }
 
-void virtiop_deregister_mmio_range(struct kvm_virtiop_bind_device *bind_device)
-{
-	/* Do nothing for now */
-}
-
+/* Callback function for guest read IO fault */
 static int virtiop_read(struct kvm_io_device *this, gpa_t addr, int len,
                 void *val)
 {
-	gpa_t mmio_base = virtiop_device[dev_num].mmio_gpa;
-	int mmio_len = virtiop_device[dev_num].mmio_len;
+	gpa_t mmio_base = virtiop_device[VIRTIOP_DEV].mmio_gpa;
+	int mmio_len = virtiop_device[VIRTIOP_DEV].mmio_len;
 	int offset = addr - mmio_base;
 	volatile void __iomem *target = (void*)HOST_VIRTIO0_BASE + offset;
 
@@ -183,22 +177,21 @@ static int virtiop_read(struct kvm_io_device *this, gpa_t addr, int len,
 		*(int*)val = 1;
 	else
 		*(unsigned long*)val = readl(target);
-//	printk("virtiop_read gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
 
     return 0;
 }
 
+/* Callback function for guest wrtie IO fault */
 static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
                 const void *val)
 {
-	gpa_t mmio_base = virtiop_device[dev_num].mmio_gpa;
-	int mmio_len = virtiop_device[dev_num].mmio_len;
-	struct kvm *kvm = virtiop_device[dev_num].kvm;
+	gpa_t mmio_base = virtiop_device[VIRTIOP_DEV].mmio_gpa;
+	int mmio_len = virtiop_device[VIRTIOP_DEV].mmio_len;
+	struct kvm *kvm = virtiop_device[VIRTIOP_DEV].kvm;
 	struct kvm_vcpu *vcpu = kvm->vcpus[0];
 	int offset = addr - mmio_base;
 	volatile void __iomem *target = (HOST_VIRTIO0_BASE + offset);
 
-//	printk("virtiop_write gpa=0x%llx, len=%d, data=0x%lx\n", addr, len, (unsigned long)val);
 	if(offset > VIRTIO_MMIO_CONFIG) {
 		u8 *ptr = val;
 		writeb(*ptr, target);
@@ -227,17 +220,13 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 		avail_gpa = (queue_pfn+1)<<PAGE_SHIFT;
 		used_gpa  = (queue_pfn+2)<<PAGE_SHIFT;
 
-		debug_desc_gfn  = queue_pfn;
-		debug_avail_gfn = queue_pfn+1;
-		debug_used_gfn  = queue_pfn+2;
-
 		stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, desc_gpa, &host_desc_pte, false);
 		stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, avail_gpa, &host_avail_pte, false);
 		stage2_set_pte(kvm, &vcpu->arch.mmu_page_cache, used_gpa, &host_used_pte, false);
 
-		virtiop_device[dev_num].vq_desc_hfn  = host_desc_pfn;
-		virtiop_device[dev_num].vq_avail_hfn = host_avail_pfn;
-		virtiop_device[dev_num].vq_used_hfn  = host_used_pfn;
+		virtiop_device[VIRTIOP_DEV].vq_desc_hfn  = host_desc_pfn;
+		virtiop_device[VIRTIOP_DEV].vq_avail_hfn = host_avail_pfn;
+		virtiop_device[VIRTIOP_DEV].vq_used_hfn  = host_used_pfn;
 
 		struct page *page;
 		struct vring_avail *vq_avail;	
@@ -258,9 +247,9 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 			|| hfn==KVM_PFN_ERR_HWPOISON || hfn==KVM_PFN_ERR_RO_FAULT) 
 			printk("PFN_ERR: 0x%llx\n", hfn);
 		else {
-			virtiop_device[dev_num].vq_desc_hfn  = hfn;
-			virtiop_device[dev_num].vq_avail_hfn = hfn_avail;
-			virtiop_device[dev_num].vq_used_hfn  = hfn_used;
+			virtiop_device[VIRTIOP_DEV].vq_desc_hfn  = hfn;
+			virtiop_device[VIRTIOP_DEV].vq_avail_hfn = hfn_avail;
+			virtiop_device[VIRTIOP_DEV].vq_used_hfn  = hfn_used;
 		}
 		printk("desc=0x%x, avail=0x%x, used=0x%x\n", hfn, hfn_avail, hfn_used);
 		writel((u32)hfn, target);
@@ -268,9 +257,9 @@ static int virtiop_write(struct kvm_io_device *this, gpa_t addr, int len,
 	}
 	else if(offset == VIRTIO_MMIO_QUEUE_NOTIFY) {
 		/* Guest kick, translate all GPA in description table into PA */
-		vq_translate_gpa_pa(kvm, virtiop_device[dev_num].vq_desc_hfn, 
-								 virtiop_device[dev_num].vq_avail_hfn,
-								 virtiop_device[dev_num].vq_used_hfn);
+		vq_translate_gpa_pa(kvm, virtiop_device[VIRTIOP_DEV].vq_desc_hfn, 
+								 virtiop_device[VIRTIOP_DEV].vq_avail_hfn,
+								 virtiop_device[VIRTIOP_DEV].vq_used_hfn);
 
 		writel(*(int*)val, target);
 	}
@@ -284,12 +273,14 @@ static void virtiop_destructor(struct kvm_io_device *this)
 {
 }
 
+/* Callback operations called by KVM when guest IO fault */
 const struct kvm_io_device_ops virtiop_ops = {                                      
     .read       = virtiop_read,                                                 
     .write      = virtiop_write,                                                
     .destructor = virtiop_destructor,                                           
 };                                                                                  
 
+/* VirtioP interrupt callback handler */
 static irqreturn_t interrupt_distribute(int irq, void* dev_id)                            
 {                                                                                
 	int i;
@@ -303,20 +294,45 @@ static irqreturn_t interrupt_distribute(int irq, void* dev_id)
 	}
 } 
 
-void virtiop_register_host_dev_vq(void *dev, void *queue)
+/* Called by KVM when guest(kvmtool) specify to use virtiop */
+void *virtiop_get_device(void)
 {
-	host_dev[host_dev_count++].queue = queue;	
+	int i;
+	for(i=0; i<VIRTIOP_DEVICE_ARRAY_SIZE; i++)
+		if(host_dev[i].guest_start == 0)
+			return host_dev[i].dev;
+
+	return NULL;
 }
 
+/* Called by host when host have complete virtqueue initialization */
+int virtiop_register_host_dev_vq(void *dev, void *queue)
+{
+	int i;
+	for(i=0; i<VIRTIOP_DEVICE_ARRAY_SIZE; i++)
+		if(dev == host_dev[i].dev) {
+			host_dev[host_dev_count++].queue = queue;	
+			return 1;
+		}
+
+	return -1;							// no device match
+}
+
+/* Called by host when host's device register IRQ */
 int virtiop_register_irq(unsigned int irq, irq_handler_t handler, unsigned long flags, const char *name, void *dev)
 {                                                                                
+	int i;
+	for(i=0; i<VIRTIOP_DEVICE_ARRAY_SIZE; i++)
+		if(dev == host_dev[i].dev)		// device have already registered
+			return -1;
+
 	host_dev[host_dev_count].irqd.irq = irq;
 	host_dev[host_dev_count].irqd.handler = handler;
 	host_dev[host_dev_count].irqd.flags = flags;
 	host_dev[host_dev_count].dev = dev;
 	strcpy(host_dev[host_dev_count].name, name);
 
-	virtiop_device[dev_num].host_dev = dev;
+	virtiop_device[VIRTIOP_DEV].host_dev = dev;
     return request_irq(irq, interrupt_distribute, flags, name, dev);      
 }                                                                  
 

@@ -44,8 +44,6 @@ static phys_addr_t hyp_idmap_vector;
 
 #define kvm_pmd_huge(_x)	(pmd_huge(_x) || pmd_trans_huge(_x))
 
-extern u64 debug_desc_gfn, debug_avail_gfn, debug_used_gfn;
-
 static void kvm_tlb_flush_vmid_ipa(struct kvm *kvm, phys_addr_t ipa)
 {
 	/*
@@ -552,12 +550,7 @@ int stage2_set_pte(struct kvm *kvm, struct kvm_mmu_memory_cache *cache,
 
 	/* Create 2nd stage page table mapping - Level 3 */
 	old_pte = *pte;
-	if(addr==debug_desc_gfn<<12 || addr==debug_avail_gfn<<12 || addr==debug_used_gfn<<12) {
-		printk("pte=0x%llx, old_pte=0x%llx, new_pte=0x%llx\n", pte, old_pte, *new_pte);
-		printk("pte_present(old_pte)=%d\n", pte_present(old_pte));	
-	}
 	kvm_set_pte(pte, *new_pte);
-
 	if (pte_present(old_pte))
 		kvm_tlb_flush_vmid_ipa(kvm, addr);
 	else
@@ -706,12 +699,6 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	pfn = gfn_to_pfn_prot(kvm, gfn, write_fault, &writable);
 	if (is_error_pfn(pfn))
 		return -EFAULT;
-//	if(gfn > 0x9a000)
-//		printk("===== in user_mem_abort : gfn=0x%llx, pfn=0x%llx =====\n", gfn, pfn);
-	if(gfn==debug_desc_gfn || gfn==debug_avail_gfn || gfn==debug_used_gfn)  {
-		printk("===== in user_mem_abort : gfn=0x%llx, pfn=0x%llx =====\n", gfn, pfn);
-		printk("===== above debug writefault=%d, esr=0x%x=====\n", write_fault, kvm_vcpu_get_hsr(vcpu)); 
-	}
 
 	spin_lock(&kvm->mmu_lock);
 	if (mmu_notifier_retry(kvm, mmu_seq))

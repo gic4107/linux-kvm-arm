@@ -5,10 +5,10 @@
 #include <linux/interrupt.h>
 #include "../../virt/kvm/iodev.h"
 extern const struct kvm_io_device_ops virtiop_ops;
-extern int virtiop_register_mmio_range(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_device);
-extern void virtiop_deregister_mmio_range(struct kvm_virtiop_bind_device *bind_device);
-extern int virtiop_register_irq(unsigned int,irq_handler_t,unsigned long,const char*,void*);
-extern void virtiop_register_host_dev_vq(void*,void*);
+int virtiop_register_mmio_range(struct kvm *kvm, void *virtiop_dev, struct kvm_virtiop_bind_device *bind_device);
+int virtiop_register_irq(unsigned int,irq_handler_t,unsigned long,const char*,void*);
+int virtiop_register_host_dev_vq(void*,void*);
+void *virtiop_get_device(void);
 
 struct kvm_virtiop_device {                                                          
 	u64         mmio_gpa;              

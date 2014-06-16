@@ -15,6 +15,11 @@ int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_devic
 	printk("kvm_assign_vmmio: 0x%llx, %d\n", bind_device->mmio_gpa, bind_device->mmio_len);
 	int ret = 0;
 	struct kvm_io_device *dev;
+	void *virtiop_device;
+
+	virtiop_device = virtiop_get_device();
+	if(!virtiop_device)
+		goto out;
 	
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if(!dev) 
@@ -26,13 +31,12 @@ int kvm_assign_vmmio(struct kvm *kvm, struct kvm_virtiop_bind_device *bind_devic
 	if(ret < 0)
 		goto out;
 
-	ret = virtiop_register_mmio_range(kvm, bind_device);
+	ret = virtiop_register_mmio_range(kvm, virtiop_device, bind_device);
 	if(ret < 0)
 		goto out;
 
 	return ret;
 out:
 	printk("kvm_assigm_vmmio fail\n");
-	virtiop_deregister_mmio_range(bind_device);
 	return ret;
 }

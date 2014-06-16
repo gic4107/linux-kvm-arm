@@ -173,10 +173,8 @@ static void vm_get(struct virtio_device *vdev, unsigned offset,
 	u8 *ptr = buf;
 	int i;
 
-	for (i = 0; i < len; i++) {
-		printk("vm_get 0x%llx\n", vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
+	for (i = 0; i < len; i++) 
 		ptr[i] = readb(vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
-	}
 }
 
 static void vm_set(struct virtio_device *vdev, unsigned offset,
@@ -186,10 +184,8 @@ static void vm_set(struct virtio_device *vdev, unsigned offset,
 	const u8 *ptr = buf;
 	int i;
 
-	for (i = 0; i < len; i++) {
-		printk("vm_set 0x%llx\n", vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
+	for (i = 0; i < len; i++) 
 		writeb(ptr[i], vm_dev->base + VIRTIO_MMIO_CONFIG + offset + i);
-	}
 }
 
 static u8 vm_get_status(struct virtio_device *vdev)
@@ -228,7 +224,6 @@ static bool vm_notify(struct virtqueue *vq)
 
 	/* We write the queue's selector into the notification register to
 	 * signal the other end */
-	printk("dev %s %s kick@ 0x%llx\n", dev_name(&(vm_dev->vdev.dev)), dev_name(&(vm_dev->pdev->dev)), vm_dev->base + VIRTIO_MMIO_QUEUE_NOTIFY);
 	writel(vq->index, vm_dev->base + VIRTIO_MMIO_QUEUE_NOTIFY);
 	return true;
 }
@@ -247,7 +242,6 @@ static irqreturn_t vm_interrupt(int irq, void *opaque)
 	/* Read and acknowledge interrupts */
 	status = readl(vm_dev->base + VIRTIO_MMIO_INTERRUPT_STATUS);
 	writel(status, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
-	printk("host read status=%d\n", status);
 
 	if (unlikely(status & VIRTIO_MMIO_INT_CONFIG)
 			&& vdrv && vdrv->config_changed) {
@@ -370,13 +364,9 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	writel(virt_to_phys(info->queue) >> PAGE_SHIFT,
 			vm_dev->base + VIRTIO_MMIO_QUEUE_PFN);
 
-	printk("host's virtqueue address, VA=0x%llx, PA=0x%llx, HFN=%x\n", 
-			info->queue, virt_to_phys(info->queue), virt_to_phys(info->queue)>>PAGE_SHIFT);
 	/* Create the vring */
 	vq = vring_new_virtqueue(index, info->num, VIRTIO_MMIO_VRING_ALIGN, vdev,
 				 true, info->queue, vm_notify, callback, name);
-	printk("desc=0x%llx, avail=0x%llx, used_hfn=0x%llx\n", 
-			virt_to_phys(info->queue), virt_to_phys(info->queue+PAGE_SIZE), virt_to_phys(info->queue+2*PAGE_SIZE));
 	if (!vq) {
 		err = -ENOMEM;
 		goto error_new_virtqueue;
@@ -390,7 +380,9 @@ static struct virtqueue *vm_setup_vq(struct virtio_device *vdev, unsigned index,
 	spin_unlock_irqrestore(&vm_dev->lock, flags);
 
 #ifdef CONFIG_VIRTIOP
-	virtiop_register_host_dev_vq(vm_dev, virt_to_phys(info->queue));
+	err = virtiop_register_host_dev_vq(vm_dev, virt_to_phys(info->queue));
+	if(err < 0)
+		goto error_new_virtqueue;
 #endif
 
 	return vq;
@@ -416,7 +408,6 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 
 	/* VirtioP interrupt distributor */                                                 
 #ifdef CONFIG_VIRTIOP                                                          
-    printk("virtio block call register_irq\n"); 
     err = virtiop_register_irq(irq, vm_interrupt, IRQF_SHARED,                              
             dev_name(&vdev->dev), vm_dev);                                          
 #else                                                                               
@@ -467,7 +458,6 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	struct resource *mem;
 	unsigned long magic;
 
-	printk("virtio_mmio_probe, device_name=%s\n", dev_name(&pdev->dev));
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem)
 		return -EINVAL;
@@ -489,7 +479,6 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	vm_dev->base = devm_ioremap(&pdev->dev, mem->start, resource_size(mem));
 	if (vm_dev->base == NULL)
 		return -EFAULT;
-	printk("mem=0x%llx, vm_dev->base=0x%llx, resource_size=0x%llx\n", mem->start, vm_dev->base, resource_size(mem));
 
 	/* Check magic value */
 	magic = readl(vm_dev->base + VIRTIO_MMIO_MAGIC_VALUE);
